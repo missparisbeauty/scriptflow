@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScriptFlow — AI 流量腳本產生器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a1a1a;
+  --paper:#f5f1e8;
+  --paper-2:#ebe5d3;
+  --line:#1a1a1a;
+  --accent:#ff4d2e;
+  --accent-2:#2d5f3f;
+  --muted:#6b6354;
+  --hot:#ffd400;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--paper);color:var(--ink);font-family:'Noto Sans TC',sans-serif;font-size:14px;line-height:1.5}
+body{min-height:100vh;display:flex;flex-direction:column}
+
+/* ==== Top Bar ==== */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 28px;border-bottom:2px solid var(--ink);
+  background:var(--paper);position:sticky;top:0;z-index:10;
+}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{
+  width:38px;height:38px;border:2px solid var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent);color:#fff;font-family:'Fraunces',serif;
+  font-weight:800;font-size:20px;font-style:italic;
+  transform:rotate(-3deg);
+}
+.brand-name{font-family:'Fraunces',serif;font-size:24px;font-weight:800;letter-spacing:-0.02em}
+.brand-name em{font-style:italic;color:var(--accent)}
+.brand-tag{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:0.05em}
+
+.topbar-right{display:flex;align-items:center;gap:18px}
+.schedule-badge{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 12px;border:1.5px solid var(--ink);background:#fff;
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.05em;
+}
+.schedule-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 0 3px rgba(45,95,63,0.2);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.user-chip{
+  width:36px;height:36px;border:2px solid var(--ink);background:var(--hot);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-weight:800;font-size:16px;
+}
+
+/* ==== Layout ==== */
+.layout{display:grid;grid-template-columns:260px 1fr;flex:1;min-height:0}
+
+/* ==== Sidebar ==== */
+.sidebar{
+  border-right:2px solid var(--ink);background:var(--paper-2);
+  padding:24px 20px;overflow-y:auto;
+}
+.sb-section{margin-bottom:28px}
+.sb-label{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.15em;
+  color:var(--muted);margin-bottom:10px;text-transform:uppercase;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.sb-label .num{font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:13px;color:var(--ink)}
+
+/* category toggle */
+.cat-toggle{display:flex;border:2px solid var(--ink);background:#fff}
+.cat-btn{
+  flex:1;padding:11px 0;border:none;background:transparent;cursor:pointer;
+  font-family:'Noto Sans TC',sans-serif;font-weight:700;font-size:14px;
+  position:relative;transition:all 0.15s;
+}
+.cat-btn:first-child{border-right:2px solid var(--ink)}
+.cat-btn.active{background:var(--ink);color:var(--paper)}
+.cat-btn .ico{display:inline-block;margin-right:4px;font-size:15px}
+
+/* category chips (品類鎖定) */
+.cat-chip{
+  display:inline-block;padding:4px 10px;font-size:11.5px;font-weight:500;
+  border:1.5px solid var(--ink);background:#fff;cursor:pointer;
+  transition:all 0.15s;
+}
+.cat-chip:hover{transform:translate(-1px,-1px);box-shadow:2px 2px 0 var(--ink)}
+.cat-chip.active{background:var(--accent);color:#fff}
+.cat-chip.muted{
+  background:var(--paper-2);color:var(--muted);border-color:var(--muted);
+  text-decoration:line-through;text-decoration-thickness:1.5px;
+}
+
+/* sources */
+.source-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 13px;background:#fff;border:1.5px solid var(--ink);
+  margin-bottom:8px;cursor:pointer;transition:all 0.15s;
+}
+.source-item:hover{transform:translate(-2px,-2px);box-shadow:3px 3px 0 var(--ink)}
+.source-info{display:flex;align-items:center;gap:10px}
+.source-icon{
+  width:22px;height:22px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-weight:800;font-size:12px;color:#fff;
+}
+.icon-rs{background:#e91e3d}
+.icon-dy{background:#000}
+.icon-th{background:#1a1a1a;border:1.5px solid #fff;outline:1.5px solid #1a1a1a}
+.source-name{font-weight:500;font-size:13px}
+.source-count{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
+.toggle-sw{
+  width:32px;height:18px;border:1.5px solid var(--ink);background:var(--paper);
+  position:relative;cursor:pointer;
+}
+.toggle-sw::after{
+  content:"";position:absolute;top:1px;left:1px;width:12px;height:12px;
+  background:var(--ink);transition:left 0.15s;
+}
+.toggle-sw.on{background:var(--accent-2)}
+.toggle-sw.on::after{left:16px;background:#fff}
+
+/* funnel + intent tags */
+.funnel-tag,.intent-tag{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:500;
+  padding:2px 7px;border:1.5px solid var(--ink);letter-spacing:0.02em;
+  display:inline-flex;align-items:center;
+}
+.funnel-seed{background:#e8f5e9;color:#1b5e20}
+.funnel-pull{background:#fff3e0;color:#e65100}
+.funnel-harvest{background:var(--accent);color:#fff}
+.intent-tag{background:var(--paper-2);color:var(--ink)}
+.intent-low{opacity:0.7}
+.intent-high{background:var(--hot);color:var(--ink);border-color:var(--ink);font-weight:700}
+
+/* funnel banner on script cards */
+.funnel-banner{
+  padding:8px 14px;background:var(--paper-2);border-bottom:1px solid var(--ink);
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+}
+
+/* CTA variants */
+.cta-section{
+  background:var(--paper-2);padding:14px 16px;border-top:2px dashed var(--ink);
+}
+.cta-label{
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.12em;
+  color:var(--accent);margin-bottom:8px;text-transform:uppercase;font-weight:700;
+}
+.cta-variant{
+  background:#fff;border:1.5px solid var(--ink);padding:9px 11px;margin-bottom:6px;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;
+  transition:all 0.15s;
+}
+.cta-variant:hover{transform:translate(-1px,-1px);box-shadow:2px 2px 0 var(--ink)}
+.cta-variant:last-child{margin-bottom:0}
+.cta-text{font-size:12px;line-height:1.45;flex:1}
+.cta-text strong{font-weight:700}
+.cta-meta{
+  font-family:'JetBrains Mono',monospace;font-size:9px;
+  padding:2px 6px;background:var(--ink);color:var(--paper);
+  white-space:nowrap;letter-spacing:0.02em;
+}
+.cta-meta.warm{background:var(--accent-2)}
+.cta-meta.cool{background:#1565c0}
+.cta-meta.hot{background:var(--accent)}
+
+/* compliance check */
+.compliance-bar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 14px;background:var(--paper-2);border-top:1px solid var(--ink);
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;
+}
+.compliance-bar.warn{background:#fff3e0}
+.compliance-pass{color:var(--accent-2);font-weight:700}
+.compliance-warn{color:#e65100;font-weight:700}
+.warn-word{
+  background:#ffd7c2;border-bottom:2px wavy #e65100;padding:0 3px;cursor:help;
+  position:relative;
+}
+
+/* strategy buttons */
+.strategy-btn{
+  display:block;width:100%;padding:11px 14px;border:none;background:transparent;
+  cursor:pointer;text-align:left;transition:all 0.15s;
+  font-family:'Noto Sans TC',sans-serif;
+}
+.strategy-btn:hover{background:var(--paper-2)}
+.strategy-btn.active{background:var(--accent);color:#fff}
+.strategy-btn.active .muted-text,
+.strategy-btn.active div:last-child{color:rgba(255,255,255,0.8) !important}
+.progress-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.progress-num{font-family:'Fraunces',serif;font-weight:800;font-size:28px;line-height:1}
+.progress-num em{font-style:italic;color:var(--accent)}
+.progress-total{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+.progress-bar{height:6px;background:var(--paper-2);border:1px solid var(--ink);overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);width:66%;transition:width 0.3s}
+.progress-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:8px}
+
+/* history */
+.history-item{
+  padding:10px 12px;background:transparent;border-left:2px solid var(--ink);
+  margin-bottom:6px;cursor:pointer;transition:all 0.15s;
+}
+.history-item:hover{background:#fff;border-left-color:var(--accent)}
+.history-title{font-size:12px;font-weight:500;margin-bottom:3px}
+.history-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
+
+/* ==== Main ==== */
+.main{padding:28px 36px;overflow-y:auto;background:var(--paper)}
+
+.hero{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--ink);
+}
+.hero-text h1{
+  font-family:'Fraunces',serif;font-size:38px;font-weight:800;
+  letter-spacing:-0.025em;line-height:1.05;margin-bottom:8px;
+}
+.hero-text h1 em{font-style:italic;color:var(--accent)}
+.hero-meta{
+  display:flex;gap:18px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--muted);align-items:center;
+}
+.hero-meta .dot{width:3px;height:3px;background:var(--muted);border-radius:50%}
+.hero-actions{display:flex;gap:10px}
+.btn{
+  padding:10px 18px;border:2px solid var(--ink);background:#fff;cursor:pointer;
+  font-family:'Noto Sans TC',sans-serif;font-weight:700;font-size:13px;
+  transition:all 0.15s;display:inline-flex;align-items:center;gap:6px;
+}
+.btn:hover{transform:translate(-2px,-2px);box-shadow:3px 3px 0 var(--ink)}
+.btn-primary{background:var(--ink);color:var(--paper)}
+.btn-primary:hover{background:var(--accent);border-color:var(--accent);box-shadow:3px 3px 0 var(--ink)}
+
+/* candidate row */
+.input-row{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:28px;
+}
+.candidate{
+  background:#fff;border:2px solid var(--ink);padding:14px;position:relative;
+  transition:all 0.15s;cursor:pointer;
+}
+.candidate:hover{transform:translate(-3px,-3px);box-shadow:5px 5px 0 var(--ink)}
+.candidate-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.cand-num{
+  font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:32px;
+  line-height:1;color:var(--accent);
+}
+.cand-platform{
+  display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;
+  font-size:10px;text-transform:uppercase;letter-spacing:0.08em;
+}
+.cand-thumb{
+  width:100%;aspect-ratio:16/9;background:var(--paper-2);border:1px solid var(--ink);
+  margin-bottom:10px;display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-style:italic;color:var(--muted);
+  background-image:repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(0,0,0,0.04) 6px,rgba(0,0,0,0.04) 7px);
+  position:relative;overflow:hidden;
+}
+.cand-thumb-emoji{font-size:48px}
+.cand-title{font-size:13px;font-weight:500;line-height:1.4;margin-bottom:8px;height:36px;overflow:hidden}
+.cand-stats{
+  display:flex;gap:10px;font-family:'JetBrains Mono',monospace;
+  font-size:10px;color:var(--muted);padding-top:8px;border-top:1px dashed var(--ink);
+}
+.cand-stat{display:flex;align-items:center;gap:3px}
+.hot-tag{
+  position:absolute;top:8px;right:8px;background:var(--hot);border:1.5px solid var(--ink);
+  padding:2px 7px;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;
+  transform:rotate(3deg);
+}
+
+/* manual input */
+.manual-row{
+  display:flex;gap:10px;margin-bottom:30px;padding:14px;background:var(--paper-2);
+  border:1.5px dashed var(--ink);
+}
+.manual-input{
+  flex:1;padding:10px 14px;border:1.5px solid var(--ink);background:#fff;
+  font-family:'JetBrains Mono',monospace;font-size:12px;
+}
+.manual-input::placeholder{color:var(--muted)}
+
+/* tabs */
+.tabs{display:flex;border-bottom:2px solid var(--ink);margin-bottom:22px;gap:0}
+.tab{
+  padding:12px 22px;border:none;background:transparent;cursor:pointer;
+  font-family:'Noto Sans TC',sans-serif;font-weight:700;font-size:14px;
+  position:relative;color:var(--muted);transition:color 0.15s;
+}
+.tab.active{color:var(--ink)}
+.tab.active::after{
+  content:"";position:absolute;bottom:-2px;left:0;right:0;height:3px;background:var(--accent);
+}
+.tab-num{
+  font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:11px;
+  color:var(--accent);margin-right:6px;
+}
+
+/* tab content area */
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* script panel */
+.script-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:1400px){.script-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:1100px){.script-grid{grid-template-columns:1fr}}
+.script-card{
+  background:#fff;border:2px solid var(--ink);padding:0;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.script-head{
+  padding:13px 18px;background:var(--ink);color:var(--paper);
+  display:flex;justify-content:space-between;align-items:center;
+}
+.script-head h3{
+  font-family:'Fraunces',serif;font-size:18px;font-weight:600;font-style:italic;
+}
+.script-head h3 .label{
+  display:inline-block;background:var(--accent);color:#fff;font-style:normal;
+  font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;
+  margin-right:8px;letter-spacing:0.08em;vertical-align:middle;font-weight:500;
+}
+.script-meta-bar{display:flex;gap:12px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
+.script-body{padding:18px 22px;flex:1;line-height:1.75;font-size:13.5px}
+.script-body p{margin-bottom:10px}
+.script-body .hl{background:var(--hot);padding:0 3px;font-weight:500}
+.script-body .timer{
+  display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--accent);margin-right:6px;font-weight:500;
+}
+.script-foot{
+  padding:12px 18px;background:var(--paper-2);border-top:1px solid var(--ink);
+  display:flex;justify-content:space-between;align-items:center;
+}
+
+/* storyboard table */
+.sb-platform-tabs{
+  display:flex;border:2px solid var(--ink);background:var(--paper);
+  margin-bottom:16px;width:fit-content;
+}
+.sb-pf-btn{
+  padding:10px 20px;border:none;background:transparent;cursor:pointer;
+  font-family:'Noto Sans TC',sans-serif;font-weight:700;font-size:13px;
+  color:var(--ink);position:relative;display:flex;align-items:center;gap:7px;
+  border-right:2px solid var(--ink);transition:all 0.15s;
+}
+.sb-pf-btn:last-child{border-right:none}
+.sb-pf-btn.active{background:var(--ink);color:var(--paper)}
+.sb-pf-btn .pf-tag{
+  font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.05em;
+  background:var(--hot);color:var(--ink);padding:1px 5px;font-weight:500;
+}
+.sb-pf-btn.active .pf-tag{background:var(--accent);color:#fff}
+.sb-pf-btn .pf-len{
+  font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);
+}
+.sb-pf-btn.active .pf-len{color:rgba(245,241,232,0.7)}
+.sb-panel{display:none}
+.sb-panel.active{display:block}
+
+.sb-table-wrap{
+  background:#fff;border:2px solid var(--ink);overflow-x:auto;
+}
+.sb-table{
+  width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;
+}
+.sb-table thead th{
+  background:var(--ink);color:var(--paper);
+  padding:11px 14px;text-align:left;
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.08em;
+  text-transform:uppercase;font-weight:500;
+  border-right:1px solid var(--paper);
+}
+.sb-table thead th:last-child{border-right:none}
+.sb-table thead th .col-num{
+  font-family:'Fraunces',serif;font-style:italic;font-weight:800;
+  color:var(--accent);margin-right:5px;font-size:13px;
+}
+.sb-table tbody tr{border-bottom:1px solid var(--ink)}
+.sb-table tbody tr:last-child{border-bottom:none}
+.sb-table tbody tr:hover{background:var(--paper-2)}
+.sb-table td{
+  padding:14px;vertical-align:top;border-right:1px dashed var(--ink);
+  line-height:1.6;
+}
+.sb-table td:last-child{border-right:none}
+.sb-col-time{
+  width:9%;font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--ink);background:var(--paper-2);font-weight:500;
+}
+.sb-col-time .scene-num{
+  font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:22px;
+  color:var(--accent);display:block;margin-bottom:4px;line-height:1;
+}
+.sb-col-visual{width:28%}
+.sb-col-audio{width:21%}
+.sb-col-subtitle{width:24%}
+.sb-col-product{width:18%}
+
+.product-tag{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;
+  padding:3px 7px;border:1.5px solid var(--ink);margin-bottom:6px;
+}
+.product-none{background:#fff;color:var(--ink)}
+.product-soft{background:#fff3e0;color:#e65100}
+.product-hero{background:var(--accent);color:#fff}
+.product-cta{background:var(--accent-2);color:#fff}
+.product-desc{font-size:11.5px;line-height:1.55;color:var(--ink)}
+
+.sb-visual-thumb{
+  width:100%;aspect-ratio:16/9;background:var(--paper-2);
+  background-image:
+    repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(0,0,0,0.06) 18px,rgba(0,0,0,0.06) 19px),
+    repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(0,0,0,0.06) 18px,rgba(0,0,0,0.06) 19px);
+  display:flex;align-items:center;justify-content:center;font-size:32px;
+  position:relative;border:1px solid var(--ink);margin-bottom:8px;
+}
+.sb-visual-thumb-tag{
+  position:absolute;bottom:5px;left:5px;background:#fff;border:1px solid var(--ink);
+  padding:1px 5px;font-family:'JetBrains Mono',monospace;font-size:9px;
+}
+.sb-visual-text{font-size:12.5px;line-height:1.6}
+.sb-visual-text strong{font-weight:700;background:var(--hot);padding:0 2px}
+
+.sb-audio-line,.sb-sub-line{font-size:12.5px;line-height:1.65;margin-bottom:6px}
+.sb-audio-line:last-child,.sb-sub-line:last-child{margin-bottom:0}
+.sb-audio-tag{
+  display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;
+  letter-spacing:0.05em;background:var(--accent-2);color:#fff;
+  padding:1px 6px;margin-right:5px;vertical-align:middle;
+}
+.sb-audio-tag.bgm{background:var(--accent)}
+.sb-audio-tag.sfx{background:var(--ink)}
+.sb-sub-quote{
+  display:block;background:var(--paper-2);padding:7px 9px;border-left:2px solid var(--accent);
+  font-size:12.5px;line-height:1.55;
+}
+.sb-sub-narration{font-style:italic;color:var(--muted);font-size:11.5px}
+
+/* analysis */
+.analysis-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px}
+.analysis-card{background:#fff;border:2px solid var(--ink);padding:18px;position:relative}
+.analysis-card::before{
+  content:"";position:absolute;top:-2px;left:-2px;right:-2px;height:6px;background:var(--ink);
+}
+.analysis-card.rs::before{background:#e91e3d}
+.analysis-card.dy::before{background:#000}
+.analysis-card.th::before{background:#1a1a1a}
+.analysis-platform{
+  font-family:'Fraunces',serif;font-size:22px;font-weight:800;font-style:italic;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px;
+}
+.analysis-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.tag{
+  font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 8px;
+  background:var(--paper-2);border:1px solid var(--ink);
+}
+.tag.hot{background:var(--hot)}
+.analysis-body{font-size:12.5px;line-height:1.7;color:var(--ink)}
+.analysis-body strong{font-weight:700}
+
+.synthesis{
+  background:var(--ink);color:var(--paper);padding:24px 28px;border:2px solid var(--ink);
+  position:relative;
+}
+.synthesis-label{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.15em;
+  color:var(--accent);margin-bottom:8px;text-transform:uppercase;
+}
+.synthesis h3{
+  font-family:'Fraunces',serif;font-size:24px;font-weight:800;font-style:italic;
+  margin-bottom:12px;
+}
+.synthesis-body{font-size:13.5px;line-height:1.75}
+.synthesis-body em{color:var(--hot);font-style:normal;font-weight:500}
+.synthesis-corner{
+  position:absolute;top:14px;right:18px;font-family:'Fraunces',serif;font-style:italic;
+  font-weight:800;font-size:64px;color:var(--accent);opacity:0.85;line-height:1;
+}
+
+/* footer note */
+.footnote{
+  margin-top:32px;padding-top:18px;border-top:1px dashed var(--ink);
+  display:flex;justify-content:space-between;align-items:center;
+  font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
+}
+
+@media(max-width:1100px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .input-row,.sb-grid,.analysis-grid{grid-template-columns:1fr 1fr}
+  .script-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Top -->
+<div class="topbar">
+  <div class="brand">
+    <div class="logo">S</div>
+    <div>
+      <div class="brand-name">Script<em>Flow</em></div>
+      <div class="brand-tag">v1.0 · INTERNAL TOOL</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="schedule-badge">
+      <span class="schedule-dot"></span>
+      AUTO 09:00 · NEXT 19h 24m
+    </div>
+    <div class="user-chip">A</div>
+  </div>
+</div>
+
+<!-- Layout -->
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+
+    <div class="sb-section">
+      <div class="sb-label"><span>分類</span><span class="num">01</span></div>
+      <div class="cat-toggle" style="display:grid;grid-template-columns:1fr 1fr 1fr">
+        <button class="cat-btn"><span class="ico">💄</span>美妝</button>
+        <button class="cat-btn"><span class="ico">🍜</span>美食</button>
+        <button class="cat-btn active" style="border-left:2px solid var(--ink)"><span class="ico">💇</span>髮品</button>
+      </div>
+
+      <!-- 髮品模式雙軌說明 -->
+      <div style="margin-top:10px;border:1.5px solid var(--ink);overflow:hidden">
+        <div style="padding:8px 11px;background:var(--hot);font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:0.05em;border-bottom:1.5px solid var(--ink)">
+          ◆ 髮品模式 · 雙軌爬取中
+        </div>
+        <div style="padding:10px 11px;background:#fff">
+          <div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:8px">
+            <span style="background:var(--accent-2);color:#fff;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;white-space:nowrap;margin-top:1px">A 軌</span>
+            <div style="font-size:11.5px;line-height:1.5">
+              <strong>髮品爆款</strong>（帶貨語言）<br>
+              <span style="color:var(--muted);font-size:10.5px">髮膜・洗護・造型品</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-start">
+            <span style="background:var(--accent);color:#fff;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;white-space:nowrap;margin-top:1px">B 軌</span>
+            <div style="font-size:11.5px;line-height:1.5">
+              <strong>美妝爆款</strong>（流量節奏）<br>
+              <span style="color:var(--muted);font-size:10.5px">只學鉤子・節奏・CTA</span>
+            </div>
+          </div>
+        </div>
+        <div style="padding:7px 11px;background:var(--paper-2);border-top:1px dashed var(--ink);font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">
+          AI 合成：A 產品語言 × B 流量節奏
+        </div>
+      </div>
+
+      <!-- 品類鎖定（髮品模式） -->
+      <div style="margin-top:10px;padding:11px 12px;background:#fff;border:1.5px solid var(--ink)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.08em;color:var(--accent-2);margin-bottom:8px;font-weight:700;text-transform:uppercase">
+          ◆ A 軌鎖定品類
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+          <span class="cat-chip active">洗髮精</span>
+          <span class="cat-chip active">護髮素</span>
+          <span class="cat-chip active">髮膜</span>
+          <span class="cat-chip active">造型品</span>
+          <span class="cat-chip active">頭皮保養</span>
+          <span class="cat-chip muted">底妝 ✕</span>
+          <span class="cat-chip muted">保養 ✕</span>
+          <span class="cat-chip muted">彩妝 ✕</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);line-height:1.5">
+          灰色 = 已排除・僅 B 軌參考流量玩法
+        </div>
+      </div>
+
+      <!-- B 軌篩選機制 -->
+      <div style="margin-top:10px;border:1.5px solid var(--ink);overflow:hidden">
+
+        <!-- 標頭 -->
+        <div style="padding:8px 11px;background:var(--accent);color:#fff;font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center">
+          <span>◆ B 軌・美妝類型篩選</span>
+          <span style="background:rgba(255,255,255,0.2);padding:1px 6px;font-size:9px">展開 ▾</span>
+        </div>
+
+        <!-- 底層固定（不可關閉） -->
+        <div style="padding:10px 11px;background:#fff;border-bottom:1px dashed var(--ink)">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:7px;text-transform:uppercase">底層固定・品牌邊界（不可關閉）</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--paper-2);border:1.5px solid var(--ink)">
+              <div>
+                <div style="font-size:12px;font-weight:700">🧴 護膚保養教學</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">敷膜・精華液・修護結構 · 相似度 96%</div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;background:var(--accent-2);color:#fff;padding:2px 6px">必選</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--paper-2);border:1.5px solid var(--ink)">
+              <div>
+                <div style="font-size:12px;font-weight:700">📦 產品開箱實測</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">俯拍・成分特寫・使用感 · 相似度 91%</div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:9px;background:var(--accent-2);color:#fff;padding:2px 6px">必選</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI 判定區 -->
+        <div style="padding:10px 11px;background:#fff;border-bottom:1px dashed var(--ink)">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:7px;text-transform:uppercase">AI 自動判定（結構相似度 ≥ 80% 才納入）</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1.5px solid var(--ink);background:var(--paper-2)">
+              <div>
+                <div style="font-size:12px;font-weight:500">🩹 染燙受損修護</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">今日 AI 評分・結構相似度 <strong style="color:var(--accent-2)">87%</strong> ✓</div>
+              </div>
+              <div class="toggle-sw on" style="flex-shrink:0"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1.5px solid var(--ink);background:var(--paper-2)">
+              <div>
+                <div style="font-size:12px;font-weight:500">💆 頭皮頭髮保養</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">今日 AI 評分・結構相似度 <strong style="color:var(--accent-2)">83%</strong> ✓</div>
+              </div>
+              <div class="toggle-sw on" style="flex-shrink:0"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1.5px solid var(--ink);background:#fff">
+              <div>
+                <div style="font-size:12px;font-weight:500;color:var(--muted)">💄 彩妝教學</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">今日 AI 評分・結構相似度 <strong style="color:#e65100">62%</strong> ✗ 自動排除</div>
+              </div>
+              <div class="toggle-sw" style="flex-shrink:0;opacity:0.4"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border:1.5px solid var(--ink);background:#fff">
+              <div>
+                <div style="font-size:12px;font-weight:500;color:var(--muted)">👁️ 眼妝彩妝</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted)">今日 AI 評分・結構相似度 <strong style="color:#e65100">51%</strong> ✗ 自動排除</div>
+              </div>
+              <div class="toggle-sw" style="flex-shrink:0;opacity:0.4"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 小編手動加入 -->
+        <div style="padding:10px 11px;background:var(--paper-2)">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:7px;text-transform:uppercase">小編手動加入</div>
+          <div style="display:flex;gap:5px">
+            <input style="flex:1;padding:5px 8px;border:1.5px solid var(--ink);background:#fff;font-family:'JetBrains Mono',monospace;font-size:10px" placeholder="輸入類型關鍵字…"/>
+            <button class="btn" style="padding:5px 9px;font-size:11px;white-space:nowrap">＋ 加入</button>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:6px">
+            加入後 AI 仍會評分・低於 80% 會提示
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label"><span>來源平台</span><span class="num">02</span></div>
+      <div class="source-item">
+        <div class="source-info">
+          <div class="source-icon icon-rs">小</div>
+          <div>
+            <div class="source-name">小紅書</div>
+            <div class="source-count">已抓取 187 篇</div>
+          </div>
+        </div>
+        <div class="toggle-sw on"></div>
+      </div>
+      <div class="source-item">
+        <div class="source-info">
+          <div class="source-icon icon-dy">抖</div>
+          <div>
+            <div class="source-name">抖音</div>
+            <div class="source-count">已抓取 124 篇</div>
+          </div>
+        </div>
+        <div class="toggle-sw on"></div>
+      </div>
+      <div class="source-item">
+        <div class="source-info">
+          <div class="source-icon icon-th">@</div>
+          <div>
+            <div class="source-name">Threads</div>
+            <div class="source-count">已抓取 92 篇</div>
+          </div>
+        </div>
+        <div class="toggle-sw on"></div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label"><span>挑選策略</span><span class="num">03</span></div>
+      <div style="border:1.5px solid var(--ink);background:#fff;overflow:hidden">
+        <button class="strategy-btn active" data-st="0">
+          <div style="font-weight:700;font-size:12px;margin-bottom:2px">三平台各抽 1</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">互補視角・推薦</div>
+        </button>
+        <div style="height:1.5px;background:var(--ink)"></div>
+        <button class="strategy-btn" data-st="1">
+          <div style="font-weight:700;font-size:12px;margin-bottom:2px">混合熱度 Top 3</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">純互動量排序</div>
+        </button>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:8px;line-height:1.55">
+        判定 = 互動量 + 完播率（抖音／IG 加權）
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label"><span>今日進度</span><span class="num">04</span></div>
+      <div class="progress-card">
+        <div class="progress-head">
+          <div class="progress-num">2<em>/3</em></div>
+          <div class="progress-total">爆款已生成</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+        <div class="progress-time">最後更新 13:42</div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label"><span>歷史紀錄</span><span class="num">05</span></div>
+      <div class="history-item">
+        <div class="history-title">夏日純欲妝・5 步驟</div>
+        <div class="history-meta">10/28 · 美妝 · 3 鏡</div>
+      </div>
+      <div class="history-item">
+        <div class="history-title">深夜麻辣燙・打卡測評</div>
+        <div class="history-meta">10/27 · 美食 · 4 鏡</div>
+      </div>
+      <div class="history-item">
+        <div class="history-title">韓系奶油肌・遮瑕拼盤</div>
+        <div class="history-meta">10/26 · 美妝 · 5 鏡</div>
+      </div>
+      <div class="history-item">
+        <div class="history-title">巷弄日料 Omakase</div>
+        <div class="history-meta">10/25 · 美食 · 3 鏡</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="hero">
+      <div class="hero-text">
+        <div style="display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);padding:6px 14px;margin-bottom:14px;border:2px solid var(--ink);flex-wrap:wrap">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.12em;color:var(--accent)">TODAY'S TOPIC</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;background:var(--accent-2);color:#fff;padding:1px 6px">A 軌</span>
+          <span style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:16px">受損髮質修護</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(245,241,232,0.6)">· 髮品爆款 × 美妝流量節奏 · 主題集中度 81%</span>
+        </div>
+        <h1>今日<em>髮品</em>爆款，雙軌加熱中。</h1>
+        <div class="hero-meta">
+          <span>2025・10・29</span><span class="dot"></span>
+          <span>A 軌 3 個 · B 軌 3 個 · 已分析 4 個</span><span class="dot"></span>
+          <span style="color:var(--accent-2)">● 系統健康</span>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn">⟳ 換一批爆款</button>
+        <button class="btn btn-primary">▸ 生成腳本</button>
+      </div>
+    </div>
+
+    <!-- 漏斗閉環視覺化 -->
+    <div style="background:#fff;border:2px solid var(--ink);padding:18px 22px;margin-bottom:24px;position:relative">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.12em;color:var(--accent);margin-bottom:12px;text-transform:uppercase;font-weight:700">
+        ◆ 漏斗策略 · 脆引流 → Line 沉澱 → IG 成交
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:14px;align-items:stretch">
+
+        <div style="border:1.5px solid var(--ink);padding:13px 14px;background:#fff3e0">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span class="funnel-tag funnel-pull" style="font-size:9.5px">⚡ 拉流</span>
+            <span style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:14px">脆</span>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--ink)">
+            「你們頭髮也這樣嗎？」<br>
+            <span style="color:var(--muted);font-size:10.5px">引留言 → Line 社群</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;font-family:'Fraunces',serif;font-style:italic;font-size:24px;color:var(--accent);font-weight:800">→</div>
+
+        <div style="border:1.5px solid var(--ink);padding:13px 14px;background:#e8f5e9">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;padding:2px 7px;border:1.5px solid var(--ink);background:#06c755;color:#fff">💬 沉澱</span>
+            <span style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:14px">Line 社群</span>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5;color:var(--ink)">
+            完整教學・限定優惠<br>
+            <span style="color:var(--muted);font-size:10.5px">養客戶 → 推 IG 限動</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;font-family:'Fraunces',serif;font-style:italic;font-size:24px;color:var(--accent);font-weight:800">→</div>
+
+        <div style="border:1.5px solid var(--ink);padding:13px 14px;background:var(--accent);color:#fff">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:600;padding:2px 7px;border:1.5px solid #fff;background:#fff;color:var(--accent)">🎯 成交</span>
+            <span style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:14px">IG Reels</span>
+          </div>
+          <div style="font-size:11.5px;line-height:1.5">
+            「限動連結搶最後 3 組」<br>
+            <span style="color:rgba(255,255,255,0.85);font-size:10.5px">直接導購 → 完成轉換</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- candidates -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">
+      <div>
+        <div style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:18px;line-height:1">今日爆款候選（A 軌：髮品）</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:4px">
+          A 軌：髮品爆款三平台各抽 1 · B 軌：美妝節奏三平台各抽 1
+        </div>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">
+        Top 30 池中篩出 · 09:00 自動更新
+      </div>
+    </div>
+    <div class="input-row">
+      <div class="candidate">
+        <div class="hot-tag">🔥 互動 28w+</div>
+        <div class="candidate-head">
+          <div class="cand-num">01</div>
+          <div class="cand-platform"><span class="source-icon icon-rs" style="width:16px;height:16px;font-size:9px">小</span>小紅書</div>
+        </div>
+        <div class="cand-thumb"><span class="cand-thumb-emoji">💋</span></div>
+        <div class="cand-title">頭髮乾燥毛躁？這款髮膜我用了 3 週真的有感</div>
+        <div style="display:flex;gap:5px;margin:8px 0 6px;flex-wrap:wrap">
+          <span class="funnel-tag funnel-seed">🌱 種草型</span>
+          <span class="intent-tag intent-low">導購意圖 12%</span>
+        </div>
+        <div class="cand-stats">
+          <div class="cand-stat">❤ 282k</div>
+          <div class="cand-stat">💬 4.2k</div>
+          <div class="cand-stat">🔁 18k</div>
+          <div class="cand-stat" style="color:var(--accent-2)">主題 92%</div>
+        </div>
+      </div>
+
+      <div class="candidate">
+        <div class="hot-tag">🔥 完播 87%</div>
+        <div class="candidate-head">
+          <div class="cand-num">02</div>
+          <div class="cand-platform"><span class="source-icon icon-dy" style="width:16px;height:16px;font-size:9px">抖</span>抖音</div>
+        </div>
+        <div class="cand-thumb"><span class="cand-thumb-emoji">✨</span></div>
+        <div class="cand-title">洗完頭不吹乾 vs 吹乾・差別超大實際對比</div>
+        <div style="display:flex;gap:5px;margin:8px 0 6px;flex-wrap:wrap">
+          <span class="funnel-tag funnel-pull">⚡ 拉流型</span>
+          <span class="intent-tag intent-high">導購意圖 38% 🔥</span>
+        </div>
+        <div class="cand-stats">
+          <div class="cand-stat">❤ 156k</div>
+          <div class="cand-stat">💬 2.8k</div>
+          <div class="cand-stat">▶ 87%</div>
+          <div class="cand-stat" style="color:var(--accent-2)">主題 88%</div>
+        </div>
+      </div>
+
+      <div class="candidate">
+        <div class="hot-tag" style="background:var(--accent-2);color:#fff">🎯 收割型</div>
+        <div class="candidate-head">
+          <div class="cand-num">03</div>
+          <div class="cand-platform"><span class="source-icon icon-th" style="width:16px;height:16px;font-size:9px">@</span>Threads</div>
+        </div>
+        <div class="cand-thumb"><span class="cand-thumb-emoji">💄</span></div>
+        <div class="cand-title">護髮素用對方法真的差很多・限動連結最後一波</div>
+        <div style="display:flex;gap:5px;margin:8px 0 6px;flex-wrap:wrap">
+          <span class="funnel-tag funnel-harvest">🎯 收割型</span>
+          <span class="intent-tag intent-high">導購意圖 52% 🔥</span>
+        </div>
+        <div class="cand-stats">
+          <div class="cand-stat">❤ 8.4k</div>
+          <div class="cand-stat">💬 1.2k</div>
+          <div class="cand-stat">🔁 620</div>
+          <div class="cand-stat" style="color:var(--accent-2)">主題 85%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- manual input -->
+    <div class="manual-row">
+      <input class="manual-input" placeholder="或貼入你的爆款連結 — https://..." />
+      <button class="btn">＋ 加入分析</button>
+    </div>
+
+    <!-- tabs -->
+    <div class="tabs">
+      <button class="tab active"><span class="tab-num">01</span>口播腳本</button>
+      <button class="tab"><span class="tab-num">02</span>分鏡腳本</button>
+      <button class="tab"><span class="tab-num">03</span>風格分析</button>
+      <button class="tab"><span class="tab-num">04</span>成效追蹤</button>
+    </div>
+
+    <!-- ===== Panel 01：腳本 ===== -->
+    <div class="tab-panel active">
+      <div class="script-grid">
+
+        <div class="script-card">
+          <div class="script-head">
+            <h3><span class="label" style="background:#1a1a1a;border:1px solid #fff">@ THREADS</span>Threads 貼文</h3>
+            <div class="script-meta-bar">短文 · 含 hook</div>
+          </div>
+          <div class="funnel-banner">
+            <span><span class="funnel-tag funnel-seed" style="font-size:9.5px">🌱 種草型</span></span>
+            <span style="color:var(--muted)">建立信任 · 留言互動</span>
+          </div>
+          <div class="script-body" style="padding:16px 20px">
+            <p style="margin-bottom:14px">最近真的找到一款<span class="hl">救回乾枯髮質</span>的髮膜。</p>
+            <p style="margin-bottom:14px">我是染燙髮，以前頭髮乾到像稻草，梳也梳不開。</p>
+            <p style="margin-bottom:14px">用了 3 週，髮尾的毛躁真的改善很多，光澤感回來了。</p>
+            <p style="margin-bottom:14px">關鍵是<span class="hl">敷髮膜前先用毛巾吸走水分</span>——這點影響最大。</p>
+            <p style="margin-bottom:0;color:var(--accent);font-weight:500">你們的頭髮也有這個問題嗎？留言告訴我 👀</p>
+          </div>
+          <div class="cta-section">
+            <div class="cta-label">CTA 變體 · A/B 測試</div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>A.</strong> 你們的頭髮也有這個問題嗎？留言告訴我 👀</div>
+              <span class="cta-meta warm">引留言</span>
+            </div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>B.</strong> 髮膜教學完整版在主頁限動，回購率超高</div>
+              <span class="cta-meta hot">直接導購</span>
+            </div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>C.</strong> 需要的扣 1，我私訊給你 Line 社群加入連結</div>
+              <span class="cta-meta cool">名單收集</span>
+            </div>
+          </div>
+          <div class="compliance-bar">
+            <span class="compliance-pass">✓ 合規檢查通過</span>
+            <span style="color:var(--muted)">0 個警告詞 · 92 字</span>
+          </div>
+          <div class="script-foot">
+            <div class="script-meta-bar"><span>第一人稱碎念</span></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn" style="padding:6px 10px;font-size:11px">複製</button>
+              <button class="btn" style="padding:6px 10px;font-size:11px">⤓ Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="script-card">
+          <div class="script-head" style="background:#1a1a1a">
+            <h3><span class="label" style="background:var(--hot);color:#1a1a1a">▶ 脆</span>Threads 短影音</h3>
+            <div class="script-meta-bar">30s · 4 段</div>
+          </div>
+          <div class="funnel-banner">
+            <span><span class="funnel-tag funnel-pull" style="font-size:9.5px">⚡ 拉流型</span></span>
+            <span style="color:var(--muted)">引留言餵演算法 · 導流 Line 社群沉澱</span>
+          </div>
+          <div class="script-body" style="padding:16px 20px">
+            <p><span class="timer">0:00–0:05</span>「以前頭髮乾到像稻草」<span class="hl">——直到我換了這款髮膜</span>。</p>
+            <p><span class="timer">0:05–0:14</span>染燙髮、每天吹整，以前頭髮毛躁到梳不開。重點是<span class="hl">敷前毛巾吸水、敷 8 分鐘</span>。</p>
+            <p><span class="timer">0:14–0:24</span>實際對比 3 週：敷前 vs 敷後，髮尾毛躁減少，光澤感回來了。</p>
+            <p style="margin-bottom:8px"><span class="timer">0:24–0:30</span><span class="hl">你們頭髮也這樣嗎？</span>留言告訴我，完整教學整理在我的 <span class="hl">Line 社群</span>。</p>
+          </div>
+          <div class="cta-section">
+            <div class="cta-label">CTA 變體 · A/B 測試</div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>A.</strong> 你們頭髮也這樣嗎？留言告訴我，<strong>Line 社群</strong>有完整護髮教學</div>
+              <span class="cta-meta hot">引留言→Line</span>
+            </div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>B.</strong> 護髮步驟太多了，留言「想要」我私訊 <strong>Line 群連結</strong></div>
+              <span class="cta-meta hot">直導 Line</span>
+            </div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>C.</strong> 你們頭髮也這樣嗎？留言告訴我（純引互動）</div>
+              <span class="cta-meta warm">引留言</span>
+            </div>
+          </div>
+          <div class="compliance-bar">
+            <span class="compliance-pass">✓ 合規檢查通過</span>
+            <span style="color:var(--muted)">已自動將「實測」改為「實際對比」</span>
+          </div>
+          <div class="script-foot">
+            <div class="script-meta-bar"><span>直立 9:16 · 字卡大</span></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn" style="padding:6px 10px;font-size:11px">複製</button>
+              <button class="btn" style="padding:6px 10px;font-size:11px">⤓ Word</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="script-card">
+          <div class="script-head" style="background:linear-gradient(90deg,#f58529,#dd2a7b,#8134af)">
+            <h3><span class="label" style="background:#fff;color:#dd2a7b">📷 IG</span>Instagram Reels</h3>
+            <div class="script-meta-bar" style="color:rgba(255,255,255,0.85)">60s · 4 段</div>
+          </div>
+          <div class="funnel-banner">
+            <span><span class="funnel-tag funnel-harvest" style="font-size:9.5px">🎯 收割型</span></span>
+            <span style="color:var(--muted)">Line 老客 + 限動連結直接成交</span>
+          </div>
+          <div class="script-body" style="padding:16px 20px">
+            <p><span class="timer">0:00–0:08</span>姐妹們，這是我用了 3 週、<span class="hl">真正救回乾枯髮質</span>的髮膜——染燙髮必備。</p>
+            <p><span class="timer">0:08–0:25</span>我做了 3 件事：毛巾吸水後上髮膜、包保鮮膜 8 分鐘、冷水收毛鱗片——<span class="hl">冷水沖是關鍵</span>。</p>
+            <p><span class="timer">0:25–0:48</span>來看 3 週前後的對比，髮尾毛躁明顯減少，光澤感和彈性都回來了。</p>
+            <p style="margin-bottom:8px"><span class="timer">0:48–1:00</span><span class="hl">限動連結搶最後 3 組</span>，加贈護髮精華小樣。錯過再等下週。</p>
+            <p style="margin:14px 0 0;padding:9px 11px;background:var(--paper-2);border-left:2px solid var(--accent);font-size:11.5px;line-height:1.55">
+              <strong style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.08em;color:var(--accent)">CAPTION ／ HASHTAG</strong><br>
+              染燙髮救星 ✨ 3 週髮質實際對比｜限動連結搶最後 3 組<br>
+              <span style="color:var(--accent-2)">#染燙髮護髮 #髮膜推薦 #護髮教學 #乾燥髮質 #台灣髮品</span>
+            </p>
+          </div>
+          <div class="cta-section">
+            <div class="cta-label">CTA 變體 · A/B 測試</div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>A.</strong> <strong>限動連結搶最後 3 組</strong>，加贈護髮精華小樣</div>
+              <span class="cta-meta hot">直接導購</span>
+            </div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>B.</strong> 連結在 BIO，<strong>今晚 24:00 結單</strong>，錯過再等下週</div>
+              <span class="cta-meta hot">急迫感成交</span>
+            </div>
+            <div class="cta-variant">
+              <div class="cta-text"><strong>C.</strong> <strong>Line 老朋友專屬</strong>已寄優惠碼，新朋友留言加群</div>
+              <span class="cta-meta cool">分眾促單</span>
+            </div>
+          </div>
+          <div class="compliance-bar">
+            <span class="compliance-pass">✓ 合規檢查通過</span>
+            <span style="color:var(--muted)">已自動將「最持妝」改為「超持妝」</span>
+          </div>
+          <div class="script-foot">
+            <div class="script-meta-bar"><span>5 標籤</span></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn" style="padding:6px 10px;font-size:11px">複製</button>
+              <button class="btn" style="padding:6px 10px;font-size:11px">⤓ Word</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== Panel 02：分鏡 ===== -->
+    <div class="tab-panel">
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:22px">優化版短影音腳本大綱</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span style="background:var(--ink);color:var(--paper);padding:2px 8px;letter-spacing:0.05em">主題 · 受損髮質修護</span>
+            <span>萃取自</span>
+            <span style="background:var(--accent);color:#fff;padding:2px 6px">#01 小紅書</span>
+            <span style="background:var(--accent);color:#fff;padding:2px 6px">#02 抖音</span>
+            <span style="background:var(--accent);color:#fff;padding:2px 6px">#03 Threads</span>
+            <span>· 含 BGM／音效／口白／產品露出策略</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" style="padding:7px 12px;font-size:11px">⤓ PDF</button>
+          <button class="btn" style="padding:7px 12px;font-size:11px">⤓ Word</button>
+          <button class="btn btn-primary" style="padding:7px 12px;font-size:11px">⟳ 重新生成示意圖</button>
+        </div>
+      </div>
+
+      <!-- 平台切換 -->
+      <div class="sb-platform-tabs">
+        <button class="sb-pf-btn active">
+          <span class="pf-tag">脆</span>Threads 短影音
+          <span class="pf-len">· 30s · 4 鏡</span>
+        </button>
+        <button class="sb-pf-btn">
+          <span class="pf-tag">IG</span>Instagram Reels
+          <span class="pf-len">· 60s · 5 鏡</span>
+        </button>
+      </div>
+
+      <!-- 脆版分鏡 -->
+      <div class="sb-panel active">
+        <div class="sb-table-wrap">
+          <table class="sb-table">
+            <thead>
+              <tr>
+                <th><span class="col-num">01</span>秒數</th>
+                <th><span class="col-num">02</span>畫面呈現 (Visual)</th>
+                <th><span class="col-num">03</span>聲音與音效 (Audio)</th>
+                <th><span class="col-num">04</span>腳本口白 (Subtitle)</th>
+                <th><span class="col-num">05</span>產品露出</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">01</span>
+                  00:00<br>—<br>00:05
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">😩<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>視覺鉤子・1.5s 內</strong>。直立 9:16，特寫面部下午脫妝畫面，大字卡「以前下午就花了」浮現。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>節奏感強的電子 Beat 直接進。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>「叭」一聲拍立得快門音。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「以前下午底妝就花了——<strong>直到我換了這支</strong>。」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-none">不露</span>
+                  <div class="product-desc">鉤子優先<br>不露產品</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">02</span>
+                  00:05<br>—<br>00:14
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">🪞<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>快剪・3 步驟</strong>。每步驟 1.5s，海綿輕拍動作放大特寫，字卡跳出步驟編號 1 / 2 / 3。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 節奏卡點同步動作。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>「叮」3 次，每步驟一聲。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「大油肌、騎機車通勤。重點是<strong>不刷不抹、用海綿輕拍</strong>。」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-soft">帶過</span>
+                  <div class="product-desc">海綿背景<br>淡淡入鏡</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">03</span>
+                  00:14<br>—<br>00:24
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">⏱<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>分割對比</strong>。左 8:00 早晨／右 20:00 夜晚，鼻翼區域圓圈放大，時間數字快速跳動。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 持續，過渡用 1 拍鼓點。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>時鐘走動「滴答」3 秒。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「12 小時延時對比:早 8 vs 晚 8，鼻翼還是看不到毛孔。」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-hero">主推</span>
+                  <div class="product-desc">before/after<br>產品同框出現</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">04</span>
+                  00:24<br>—<br>00:30
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">👀<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>結尾 Hook</strong>。畫面定格，疊上「你們頭髮也這樣嗎？」大字卡，下方提示「連結放留言區」。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 收尾，最後一拍卡死定格。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「連結放留言區。<strong>你們夏天怎麼撐？</strong>」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-cta">CTA</span>
+                  <div class="product-desc">只留問句<br>不露產品</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- IG Reels 版分鏡 -->
+      <div class="sb-panel">
+        <div class="sb-table-wrap">
+          <table class="sb-table">
+            <thead>
+              <tr>
+                <th><span class="col-num">01</span>秒數</th>
+                <th><span class="col-num">02</span>畫面呈現 (Visual)</th>
+                <th><span class="col-num">03</span>聲音與音效 (Audio)</th>
+                <th><span class="col-num">04</span>腳本口白 (Subtitle)</th>
+                <th><span class="col-num">05</span>產品露出</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">01</span>
+                  00:00<br>—<br>00:08
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">💄<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>特寫 / 半身景</strong>。人物對鏡梳妝台前 45° 側拍，手持底霜，光線從窗邊打進來。上方掛上「影片內標題」。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>輕快上揚的流行 Beat 起音，營造期待感。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>環境白噪（極輕）。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「姐妹們，這是我這週試過<strong>最持妝</strong>的一支底妝——」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-none">不露</span>
+                  <div class="product-desc">鉤子優先<br>0–8s 不露產品</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">02</span>
+                  00:08<br>—<br>00:25
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">🪞<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>中景・正面對鏡</strong>。3 步驟拍攝（化妝水濕敷 → 上底霜 → 海綿輕拍），重點動作慢速、字幕浮現。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 持續，節奏卡點同步動作。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>「叮」3 次，每完成一步播一次。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「我做了 3 件事：化妝水濕敷 1 分鐘、上一層輕薄底霜、最後用海綿輕拍——<strong>不刷不抹</strong>是關鍵。」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-soft">帶過</span>
+                  <div class="product-desc">手部動作帶產品<br>不講品牌</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">03</span>
+                  00:25<br>—<br>00:48
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">⏱<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>分割畫面・Before / After</strong>。12 小時延時，T 字區、鼻翼局部放大，下方時間軸 8:00 → 20:00 推進。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 轉沉，過渡到舒緩段落。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>時鐘走動「滴答」音效輕墊底。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「來看 12 小時後的對比——T 字部位幾乎沒泛油，毛孔還是看不太到。我自己騎機車上下班都沒問題。」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-hero">主推</span>
+                  <div class="product-desc">50% 進度<br>產品特寫＋功效</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">04</span>
+                  00:48<br>—<br>00:58
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">📦<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>產品特寫・桌面俯拍</strong>。產品 + 贈品平鋪，「主頁限動」浮字從右滑入。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 回到主旋律，音量漸強。</div>
+                  <div class="sb-audio-line"><span class="sb-audio-tag sfx">SFX</span>浮字滑入時加「叮咚」上揚音。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-quote">「這套組合放在我主頁限時動態。<strong>真心推薦油肌姐妹</strong>。」</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-cta">CTA</span>
+                  <div class="product-desc">產品 + 限動字卡<br>滑入導購</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="sb-col-time">
+                  <span class="scene-num">05</span>
+                  00:58<br>—<br>01:00
+                </td>
+                <td class="sb-col-visual">
+                  <div class="sb-visual-thumb">✨<div class="sb-visual-thumb-tag">AI 示意圖</div></div>
+                  <div class="sb-visual-text">
+                    <strong>結尾</strong>。畫面定格特寫眼神，疊上 hashtag 字串：#油肌底妝 #持妝粉底。
+                  </div>
+                </td>
+                <td class="sb-col-audio">
+                  <div class="sb-audio-line"><span class="sb-audio-tag bgm">BGM</span>BGM 收尾淡出。</div>
+                </td>
+                <td class="sb-col-subtitle">
+                  <span class="sb-sub-narration">（無口白，畫面字卡：hashtag 滑入）</span>
+                </td>
+                <td class="sb-col-product">
+                  <span class="product-tag product-none">不露</span>
+                  <div class="product-desc">結尾留 CTA<br>不留產品</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ===== Panel 03：分析 ===== -->
+    <div class="tab-panel">
+      <div class="analysis-grid">
+        <div class="analysis-card rs">
+          <div class="analysis-platform">小紅書</div>
+          <div class="analysis-tags">
+            <span class="tag hot">純慾風</span><span class="tag">3 步驟教學</span><span class="tag">情緒前置</span>
+          </div>
+          <div class="analysis-body">
+            開頭 3 秒以<strong>情緒語句</strong>切入（「姐妹們！」「真的會哭」），中段密集穿插 hashtag 與小字補充，結尾以「合集已整理」導流主頁。鏡頭多為對鏡梳妝台。
+          </div>
+        </div>
+        <div class="analysis-card dy">
+          <div class="analysis-platform">抖音</div>
+          <div class="analysis-tags">
+            <span class="tag hot">節奏快</span><span class="tag">對比畫面</span><span class="tag">音樂卡點</span>
+          </div>
+          <div class="analysis-body">
+            前 1.5 秒必有<strong>視覺鉤子</strong>（before/after、特寫嘴唇等），中段配樂卡點切換，產品露出時間極短。標題常用「打工人」「實測」。
+          </div>
+        </div>
+        <div class="analysis-card th">
+          <div class="analysis-platform">Threads</div>
+          <div class="analysis-tags">
+            <span class="tag hot">日常碎念</span><span class="tag">短句</span><span class="tag">提問結尾</span>
+          </div>
+          <div class="analysis-body">
+            台灣 Threads 常以<strong>第一人稱碎念</strong>展開（「最近在用」「真的好」），段落短、留白多，結尾常拋問題引留言（「你們也這樣嗎？」）。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Panel 04：成效追蹤 ===== -->
+    <div class="tab-panel">
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-style:italic;font-weight:800;font-size:22px">成效追蹤・品牌爆款 DNA</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px">
+            發布後 7 / 14 天回收實際成效 · AI 沉澱「我的觀眾」DNA
+          </div>
+        </div>
+        <button class="btn btn-primary" style="padding:8px 14px;font-size:12px">＋ 貼回發布連結</button>
+      </div>
+
+      <!-- 已發布作品 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+
+        <div style="background:#fff;border:2px solid var(--ink)">
+          <div style="padding:12px 16px;background:var(--ink);color:var(--paper);display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="funnel-tag funnel-harvest" style="font-size:9.5px">🎯 收割型</span>
+              <span style="font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:15px">髮膜修護・IG Reels</span>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(245,241,232,0.7)">發布 D+7</span>
+          </div>
+          <div style="padding:14px 16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">VIEWS</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--ink)">82.4k</div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">完播率</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--accent-2)">73%</div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">CTR</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--accent)">8.2%</div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">轉換</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--ink)">142</div>
+              </div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;background:var(--paper-2);padding:8px 11px;border-left:3px solid var(--accent-2)">
+              <strong style="color:var(--accent-2)">▲ 表現優於品牌均值 +47%</strong> · CTA「限動連結搶最後 3 組」勝出 · Line 老客占轉換 64%
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:2px solid var(--ink)">
+          <div style="padding:12px 16px;background:var(--ink);color:var(--paper);display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="funnel-tag funnel-pull" style="font-size:9.5px">⚡ 拉流型</span>
+              <span style="font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:15px">洗護對比・脆</span>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(245,241,232,0.7)">發布 D+14</span>
+          </div>
+          <div style="padding:14px 16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">VIEWS</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--ink)">31.2k</div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">完播率</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--muted)">42%</div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">CTR</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--muted)">2.1%</div>
+              </div>
+              <div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.05em">轉換</div>
+                <div style="font-family:'Fraunces',serif;font-weight:800;font-style:italic;font-size:22px;color:var(--ink)">18</div>
+              </div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;background:#fff3e0;padding:8px 11px;border-left:3px solid #e65100">
+              <strong style="color:#e65100">▼ 表現低於均值 -22%</strong> · 開頭鉤子過長，建議下次 1.5s 內出鉤
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 品牌爆款 DNA -->
+      <div style="background:var(--ink);color:var(--paper);padding:24px 28px;border:2px solid var(--ink);position:relative">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.15em;color:var(--accent);margin-bottom:14px">
+          BRAND DNA · 過去 30 天沉澱 · 22 支已發布作品
+        </div>
+        <div style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;font-style:italic;margin-bottom:18px">
+          你的觀眾偏好<span style="color:var(--hot)">這些元素</span>。
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+
+          <div style="background:rgba(255,255,255,0.05);padding:14px;border:1px solid rgba(255,255,255,0.2)">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--hot);margin-bottom:8px;text-transform:uppercase">最佳開頭</div>
+            <div style="font-size:13px;line-height:1.65;margin-bottom:10px">
+              <strong>「以前 ___，直到我換了 ___」</strong><br>
+              <span style="color:rgba(245,241,232,0.7);font-size:11.5px">染燙髮痛點對比型，平均完播率 +21%</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent-2);background:rgba(45,95,63,0.3);padding:4px 8px;display:inline-block">
+              7 / 8 支爆款用此開頭
+            </div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.05);padding:14px;border:1px solid rgba(255,255,255,0.2)">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--hot);margin-bottom:8px;text-transform:uppercase">最佳 CTA 組合</div>
+            <div style="font-size:13px;line-height:1.65;margin-bottom:10px">
+              <strong>脆「Line 社群」+ IG「限動 3 組」</strong><br>
+              <span style="color:rgba(245,241,232,0.7);font-size:11.5px">雙平台閉環：脆引流到 Line、IG 收割老客戶</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);background:rgba(255,77,46,0.3);padding:4px 8px;display:inline-block">
+              組合轉換率比單發 IG 高 +210%
+            </div>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.05);padding:14px;border:1px solid rgba(255,255,255,0.2)">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.1em;color:var(--hot);margin-bottom:8px;text-transform:uppercase">最佳產品時機</div>
+            <div style="font-size:13px;line-height:1.65;margin-bottom:10px">
+              <strong>50% 進度 + 敷髮前後對比</strong><br>
+              <span style="color:rgba(245,241,232,0.7);font-size:11.5px">轉換率比 0–10s 早期露出高 4.5 倍</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent-2);background:rgba(45,95,63,0.3);padding:4px 8px;display:inline-block">
+              下次生成腳本將套用此規則
+            </div>
+          </div>
+
+        </div>
+
+        <div style="margin-top:20px;padding-top:18px;border-top:1px dashed rgba(255,255,255,0.3);font-family:'JetBrains Mono',monospace;font-size:10.5px;color:rgba(245,241,232,0.7);line-height:1.65">
+          ＊ 本品牌 DNA 將自動套用至下次腳本生成，AI 會結合「外部爆款 + 自家歷史成效」雙重輸入。
+        </div>
+      </div>
+
+    </div>
+
+    <div class="footnote">
+      <div>ScriptFlow · 內部工具 · 僅供品牌小編使用</div>
+      <div>每日 09:00（GMT+8）自動排程</div>
+    </div>
+
+  </main>
+
+</div>
+
+<script>
+// tab switch
+document.querySelectorAll('.tab').forEach((tab,i)=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.tab-panel')[i].classList.add('active');
+  });
+});
+
+// category toggle
+document.querySelectorAll('.cat-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// source toggle
+document.querySelectorAll('.toggle-sw').forEach(sw=>{
+  sw.addEventListener('click',e=>{
+    e.stopPropagation();
+    sw.classList.toggle('on');
+  });
+});
+
+// storyboard platform switch (脆 / IG)
+document.querySelectorAll('.sb-pf-btn').forEach((btn,i)=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.sb-pf-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.sb-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.sb-panel')[i].classList.add('active');
+  });
+});
+
+// strategy switch
+document.querySelectorAll('.strategy-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.strategy-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

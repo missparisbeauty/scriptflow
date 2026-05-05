@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scriptflow",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d C:\\Users\\user\\Desktop\\scriptflow && python -m uvicorn main:app --host 127.0.0.1 --port 8085"],
+      "port": 8085
+    }
+  ]
+}
