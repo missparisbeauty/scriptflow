@@ -41,7 +41,16 @@ def login(req: LoginRequest, response: Response) -> dict:
         logger.error("auth.login admin_password not configured")
         raise AuthFailed("authentication failed")
 
-    if not secrets.compare_digest(req.password, expected):
+    # 用 bytes 比對：避免使用者輸入含非 ASCII（全形、零寬字符）時
+    # secrets.compare_digest 拋 TypeError → 500（資訊洩漏：「你打了奇怪字」）
+    try:
+        password_match = secrets.compare_digest(
+            (req.password or "").encode("utf-8"),
+            (expected or "").encode("utf-8"),
+        )
+    except Exception:
+        password_match = False
+    if not password_match:
         logger.warning("auth.login failed result=invalid_password")
         raise AuthFailed("authentication failed")
 
