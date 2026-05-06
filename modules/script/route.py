@@ -22,5 +22,5 @@ router = APIRouter(
 
 @router.post("/generate")
 def generate_script(req: GenerateRequest) -> dict:
-    data = generate(req.candidate_ids, req.category)
+    data = generate(req.candidate_ids, req.category, script_type=req.script_type)
     return ok(data)

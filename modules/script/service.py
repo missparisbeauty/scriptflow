@@ -39,16 +39,35 @@ _COMPLIANCE_PLATFORM = {
 # --- 對外（route 用） ---
 
 
-def generate(candidate_ids: list[str], category: str) -> dict:
+VALID_SCRIPT_TYPES = ("traffic", "trust", "harvest")
+
+
+def generate(
+    candidate_ids: list[str],
+    category: str,
+    *,
+    script_type: str = "traffic",
+) -> dict:
     """生成三版本腳本。
 
-    完成條件：ScriptService.generate([id1,id2,id3], '髮品')
+    Args:
+        candidate_ids: 候選 ID 清單
+        category: 分類名稱（美妝 / 美食 / 髮品）
+        script_type: 脆腳本類型 — traffic（流量）/ trust（知識信任）/ harvest（變現）
+                     僅影響 threads_reel 版本（用 MissParis 品牌特化樣板）；
+                     threads_post 與 ig_reels 仍使用通用樣板。
+
+    完成條件：ScriptService.generate([id1,id2,id3], '髮品', script_type='traffic')
               → threads_post / threads_reel / ig_reels + CTA + 合規
     """
     if not candidate_ids:
         raise InvalidInput("candidate_ids cannot be empty")
     if not categories.is_valid_category(category):
         raise InvalidInput(f"invalid category: {category}")
+    if script_type not in VALID_SCRIPT_TYPES:
+        raise InvalidInput(
+            f"script_type must be one of {VALID_SCRIPT_TYPES}, got {script_type!r}"
+        )
 
     docs = candidates_service.get_candidates(candidate_ids)
     if not docs:
@@ -59,19 +78,24 @@ def generate(candidate_ids: list[str], category: str) -> dict:
 
     topic = _pick_topic(docs)
     summary = _build_candidates_summary(docs)
+    # MissParis 品牌特化 system prompt（含 4 角色設定）
     system_prompt = prompts.build_system_prompt(
-        category=category, topic=topic
+        category=category, topic=topic, brand="missparis"
     )
 
-    # 三版本各呼叫一次 LLM
+    # 三版本各呼叫一次 LLM；threads_reel 走 MissParis 三類型樣板
     versions: dict[str, dict] = {}
     for tpl in ("threads_post", "threads_reel", "ig_reels"):
+        actual_template_key = (
+            f"threads_reel:{script_type}" if tpl == "threads_reel" else tpl
+        )
         versions[tpl] = _generate_one_version(
-            tpl,
+            actual_template_key,
             system_prompt=system_prompt,
             category=category,
             topic=topic,
             summary=summary,
+            output_key=tpl,
         )
 
     # 寫入 scripts collection
@@ -81,14 +105,16 @@ def generate(candidate_ids: list[str], category: str) -> dict:
         "date": today,
         "category": category,
         "topic": topic,
+        "script_type": script_type,
         "source_candidate_ids": candidate_ids,
         **versions,
     }
     fs.save_script(script_id, data)
     logger.info(
-        "script.generated id=%s category=%s topic=%s",
+        "script.generated id=%s category=%s type=%s topic=%s",
         script_id,
         category,
+        script_type,
         topic[:20],
     )
     return {"script_id": script_id, **data}
@@ -109,8 +135,14 @@ def _generate_one_version(
     category: str,
     topic: str,
     summary: str,
+    output_key: str,
 ) -> dict:
-    """單一版本：build prompt → call LLM → parse → 合規掃描。"""
+    """單一版本：build prompt → call LLM → parse → 合規掃描。
+
+    Args:
+        template_key: 樣板鍵（含 ':variant' 後綴時走 MissParis 特化版）
+        output_key: 對應前端輸出鍵（threads_post / threads_reel / ig_reels）
+    """
     user_prompt = prompts.build_prompt(
         template_key,
         category=category,
@@ -139,10 +171,10 @@ def _generate_one_version(
             template=template_key,
         ) from e
 
-    # 合規掃描
+    # 合規掃描（用 output_key 對應 platform）
     text = _extract_text(parsed)
     parsed["compliance"] = compliance_rules.scan(
-        text, _COMPLIANCE_PLATFORM[template_key]
+        text, _COMPLIANCE_PLATFORM[output_key]
     )
     return parsed
 

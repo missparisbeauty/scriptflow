@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 .claude/settings.local.json
+.devsecret
+.devpassword
 
 # --- Python ---
 __pycache__/

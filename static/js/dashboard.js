@@ -206,12 +206,13 @@ async function doGenerateScript() {
     return;
   }
   const category = lastCandidate.category || document.getElementById("candidates-category").value;
+  const scriptType = document.getElementById("script-type")?.value || "traffic";
 
   const btn = document.getElementById("script-generate");
   if (btn) { btn.disabled = true; btn.textContent = "生成中（30-60 秒）…"; }
-  setStatus("script-status", "loading", "正在產三版本…");
+  setStatus("script-status", "loading", `正在產三版本（脆＝${scriptType}）…`);
   try {
-    const data = await generateScript({ candidate_ids: candidateIds, category });
+    const data = await generateScript({ candidate_ids: candidateIds, category, script_type: scriptType });
     lastScript = data;
     renderScript(data);
     setStatus("script-status", "success", `已生成 ${data.script_id}`);

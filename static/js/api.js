@@ -79,8 +79,11 @@ export const triggerCrawler = ({ category, strategy = "balanced", hours = 24 }) 
   _fetch("POST", "/api/v1/crawler/trigger", { body: { category, strategy, hours }, timeoutMs: 60_000 });
 
 // --- Script (LLM 端點，無 timeout) ---
-export const generateScript = ({ candidate_ids, category }) =>
-  _fetch("POST", "/api/v1/script/generate", { body: { candidate_ids, category }, timeoutMs: LLM_TIMEOUT_MS });
+export const generateScript = ({ candidate_ids, category, script_type = "traffic" }) =>
+  _fetch("POST", "/api/v1/script/generate", {
+    body: { candidate_ids, category, script_type },
+    timeoutMs: LLM_TIMEOUT_MS,
+  });
 
 // --- Storyboard (LLM 端點，無 timeout) ---
 export const generateStoryboard = ({ script_id, platform }) =>

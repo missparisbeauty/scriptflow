@@ -70,8 +70,15 @@
       <section id="tab-script" class="tab">
         <div class="card">
           <div class="card__header">
-            <h2 class="card__title">腳本生成（三版本）</h2>
-            <button id="script-generate" class="btn btn--primary" disabled>先載入候選</button>
+            <h2 class="card__title">腳本生成（三版本，脆三類型）</h2>
+            <div class="card__actions">
+              <select id="script-type" class="control" title="脆腳本類型">
+                <option value="traffic">① 流量型（hook 為主）</option>
+                <option value="trust">② 知識信任型（建立專業）</option>
+                <option value="harvest">③ 變現型（強 CTA 導購）</option>
+              </select>
+              <button id="script-generate" class="btn btn--primary" disabled>先載入候選</button>
+            </div>
           </div>
           <div id="script-status" class="status"></div>
           <div id="script-content" class="script"></div>
