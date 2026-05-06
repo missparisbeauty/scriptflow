@@ -38,6 +38,13 @@ DEFAULT_TIMEOUT_SECONDS = 60
 MAX_RETRIES = 2  # spec F3：「最多重試 2 次」
 DNA_MIN_SAMPLES = 5  # spec F6：< 5 支 → INSUFFICIENT_DATA
 
+# --- 成本護欄（rule-ai-llm：LLM API 成本控制）---
+# gpt-5-mini 估算定價（USD per 1M tokens）
+_COST_INPUT_PER_1M = 0.15
+_COST_OUTPUT_PER_1M = 0.60
+# 每次 LLM 呼叫估算上限，超過即拒絕（0 = 不限）
+MAX_COST_PER_CALL_USD: float = float(os.getenv("LLM_MAX_COST_USD", "0.50"))
+
 
 # --- 對外 API ---
 
@@ -116,6 +123,48 @@ def compute_dna(samples: list[dict]) -> dict:
     return _real_compute_dna(samples)
 
 
+# --- 成本估算與護欄 ---
+
+
+def _estimate_cost(prompt_tokens: int, max_output_tokens: int) -> float:
+    """估算單次 LLM 呼叫費用（USD）。
+
+    使用字元數 ÷ 4 估算 token 數（英文約 4 char/token；中文約 1.5 char/token，
+    取平均 3 char/token 偏保守，確保護欄不會低估）。
+    """
+    input_cost = (prompt_tokens / 1_000_000) * _COST_INPUT_PER_1M
+    output_cost = (max_output_tokens / 1_000_000) * _COST_OUTPUT_PER_1M
+    return input_cost + output_cost
+
+
+def _check_cost_guard(system_prompt: str, user_prompt: str, max_tokens: int) -> None:
+    """估算費用，超過 MAX_COST_PER_CALL_USD 時拋出 RuntimeError。
+
+    設 LLM_MAX_COST_USD=0 可停用護欄（不建議用於生產環境）。
+    """
+    if MAX_COST_PER_CALL_USD <= 0:
+        return  # 護欄已停用
+
+    # 中文 + 英文混合：以每 3 char ≈ 1 token 估算（保守）
+    estimated_input_tokens = (len(system_prompt) + len(user_prompt)) // 3
+    estimated_cost = _estimate_cost(estimated_input_tokens, max_tokens)
+
+    logger.debug(
+        "cost_guard estimated_input_tokens=%d max_output_tokens=%d estimated_usd=%.5f limit_usd=%.2f",
+        estimated_input_tokens,
+        max_tokens,
+        estimated_cost,
+        MAX_COST_PER_CALL_USD,
+    )
+
+    if estimated_cost > MAX_COST_PER_CALL_USD:
+        raise RuntimeError(
+            f"COST_GUARD_EXCEEDED: estimated ${estimated_cost:.4f} > limit ${MAX_COST_PER_CALL_USD:.2f} "
+            f"(input_tokens~{estimated_input_tokens}, max_output={max_tokens}). "
+            f"Raise LLM_MAX_COST_USD or shorten prompt."
+        )
+
+
 # --- 真實實作（呼叫 OpenAI） ---
 
 
@@ -136,6 +185,9 @@ def _real_generate_script(
     max_tokens: int,
     response_format: dict | None,
 ) -> str:
+    # 成本護欄：先估算，超限直接拒絕，不浪費 API 呼叫（rule-ai-llm）
+    _check_cost_guard(system_prompt, user_prompt, max_tokens)
+
     last_err: Exception | None = None
     for attempt in range(1 + MAX_RETRIES):
         try:

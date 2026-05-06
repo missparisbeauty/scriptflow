@@ -1,9 +1,11 @@
 # ScriptFlow 本機開發啟動腳本
 #
 # 用法：
-#   ./dev.ps1                   # 預設 port 8086，DEBUG mode，連 prod Firestore
+#   ./dev.ps1                   # 預設 port 8086，mock LLM/Image/Crawler（不燒 API 費用）
 #   ./dev.ps1 -Port 9000        # 指定其他 port
 #   ./dev.ps1 -ResetPassword    # 重設本機 admin 密碼
+#   ./dev.ps1 -RealLLM          # 使用真實 OpenAI API（需設定 SF_OPENAI_API_KEY）
+#   ./dev.ps1 -NoReload         # 停用 uvicorn --reload
 #
 # 第一次跑前必須做：
 #   gcloud auth application-default login
@@ -12,7 +14,8 @@
 param(
     [int]$Port = 8086,
     [switch]$ResetPassword,
-    [switch]$NoReload
+    [switch]$NoReload,
+    [switch]$RealLLM   # 加此 flag 才會真正呼叫 OpenAI，預設 mock 避免耗費用
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,6 +32,19 @@ if (-not (Test-Path $python)) {
 $env:DEBUG = "true"
 $env:GCP_PROJECT_ID = "seo-mpb"
 $env:SCHEDULER_ENABLED = "false"   # 本機不要跑 09:00 排程
+
+# Mock 後端：預設全開，避免本機測試誤燒 API 費用（rule-ai-llm）
+# 加 -RealLLM 才切換到真實 OpenAI API
+if ($RealLLM) {
+    Remove-Item Env:\LLM_BACKEND     -ErrorAction SilentlyContinue
+    Remove-Item Env:\IMAGE_BACKEND   -ErrorAction SilentlyContinue
+    Remove-Item Env:\CRAWLER_BACKEND -ErrorAction SilentlyContinue
+    Write-Host "  [WARN] -RealLLM: 將呼叫真實 OpenAI API，會產生費用！" -ForegroundColor Yellow
+} else {
+    $env:LLM_BACKEND     = "mock"
+    $env:IMAGE_BACKEND   = "mock"
+    $env:CRAWLER_BACKEND = "mock"
+}
 
 # Session secret：自動產生，跨重啟保留（cookie 不失效）
 $secretFile = ".\.devsecret"
@@ -51,6 +67,7 @@ if ($ResetPassword -or (-not (Test-Path $pwdFile))) {
 $env:SF_ADMIN_PASSWORD = (Get-Content $pwdFile -Raw).Trim()
 
 # --- 顯示資訊 ---
+$llmMode = if ($RealLLM) { "REAL OpenAI (費用計算中)" } else { "mock (不燒費用)" }
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "  ScriptFlow 本機開發伺服器" -ForegroundColor Cyan
@@ -59,6 +76,7 @@ Write-Host "  網址:   http://127.0.0.1:$Port" -ForegroundColor White
 Write-Host "  密碼:   $($env:SF_ADMIN_PASSWORD)" -ForegroundColor Yellow
 Write-Host "  Docs:   http://127.0.0.1:$Port/docs" -ForegroundColor White
 Write-Host "  GCP:    $($env:GCP_PROJECT_ID) (Firestore via ADC)" -ForegroundColor White
+Write-Host "  LLM:    $llmMode" -ForegroundColor $(if ($RealLLM) { "Red" } else { "Green" })
 Write-Host "  停止:   Ctrl+C" -ForegroundColor Gray
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host ""
