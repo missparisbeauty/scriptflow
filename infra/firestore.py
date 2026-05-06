@@ -126,25 +126,31 @@ def _query(
     descending: bool = True,
     limit: int | None = None,
 ) -> list[dict]:
-    """通用查詢，預設過濾 is_deleted=False。"""
+    """通用查詢；is_deleted 過濾與 ordering 在 Python 後處理，避免 Firestore
+    composite index 維護負擔（rule-database：infra 負責過濾，未指定一定要在
+    Firestore 端執行）。
+
+    交換條件：每次 over-fetch 3x 額度，足以包含被 is_deleted 排除掉的部分。
+    對本專案規模（單 collection 數百筆）成本可忽略。
+    """
     safe_limit = _validate_limit(limit)
-    q = get_db().collection(collection).where(
-        filter=FieldFilter("is_deleted", "==", False)
-    )
+    fetch_budget = min(MAX_LIMIT, max(safe_limit * 3, 10))
+
+    q = get_db().collection(collection)
     for field, op, value in filters:
         q = q.where(filter=FieldFilter(field, op, value))
-    if order_by:
-        q = q.order_by(
-            order_by,
-            direction=(
-                firestore.Query.DESCENDING
-                if descending
-                else firestore.Query.ASCENDING
-            ),
-        )
-    q = q.limit(safe_limit)
+    q = q.limit(fetch_budget)
 
-    return [d for d in (_to_dict(s) for s in q.stream()) if d is not None]
+    raw = [_to_dict(s) for s in q.stream()]
+    docs = [d for d in raw if d is not None and not d.get("is_deleted")]
+
+    if order_by:
+        docs.sort(
+            key=lambda d: d.get(order_by) or "",
+            reverse=descending,
+        )
+
+    return docs[:safe_limit]
 
 
 def _soft_delete(collection: str, doc_id: str) -> None:
