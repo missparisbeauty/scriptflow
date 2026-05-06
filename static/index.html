@@ -7,14 +7,139 @@
   <link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
-  <header>
-    <h1>ScriptFlow</h1>
-    <p class="subtitle">Phase 0 骨架就緒，前端 Phase 6 補完</p>
-  </header>
-  <main>
-    <p>後端健康檢查：<a href="/health">/health</a></p>
-  </main>
-  <script src="/static/js/api.js" defer></script>
-  <script src="/static/js/common.js" defer></script>
+
+  <!-- 登入畫面 -->
+  <div id="login-modal" class="login" hidden>
+    <div class="login__panel">
+      <h1 class="login__title">ScriptFlow</h1>
+      <p class="login__subtitle">短影音變現操盤台</p>
+      <form id="login-form" class="login__form">
+        <label class="login__label" for="login-password">管理員密碼</label>
+        <input id="login-password" class="login__input" type="password" required autocomplete="current-password">
+        <button class="login__submit" type="submit">登入</button>
+      </form>
+      <p id="login-error" class="login__error" hidden></p>
+    </div>
+  </div>
+
+  <!-- 主介面 -->
+  <div id="main" class="app" hidden>
+    <header class="topbar">
+      <h1 class="topbar__title">ScriptFlow</h1>
+      <div class="topbar__right">
+        <span id="scheduler-status" class="topbar__status">…</span>
+        <button id="logout-btn" class="topbar__logout">登出</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tabs__btn tabs__btn--active" data-tab="candidates">① 候選</button>
+      <button class="tabs__btn" data-tab="script">② 腳本 / 分鏡</button>
+      <button class="tabs__btn" data-tab="tracking">③ 成效</button>
+      <button class="tabs__btn" data-tab="dna">④ 品牌 DNA</button>
+    </nav>
+
+    <main class="main">
+
+      <!-- Tab 1: 候選 -->
+      <section id="tab-candidates" class="tab tab--active">
+        <div class="card">
+          <div class="card__header">
+            <h2 class="card__title">今日候選爆款</h2>
+            <div class="card__actions">
+              <select id="candidates-category" class="control">
+                <option value="髮品">髮品</option>
+                <option value="美妝">美妝</option>
+                <option value="美食">美食</option>
+              </select>
+              <select id="candidates-strategy" class="control">
+                <option value="balanced">balanced</option>
+                <option value="hotness">hotness</option>
+              </select>
+              <button id="candidates-refresh" class="btn btn--secondary">重新載入</button>
+              <button id="candidates-trigger" class="btn btn--primary">觸發爬取</button>
+            </div>
+          </div>
+          <div id="candidates-status" class="status"></div>
+          <div id="candidates-meta" class="meta"></div>
+          <div id="candidates-list" class="cards"></div>
+        </div>
+      </section>
+
+      <!-- Tab 2: 腳本 + 分鏡 -->
+      <section id="tab-script" class="tab">
+        <div class="card">
+          <div class="card__header">
+            <h2 class="card__title">腳本生成（三版本）</h2>
+            <button id="script-generate" class="btn btn--primary" disabled>先載入候選</button>
+          </div>
+          <div id="script-status" class="status"></div>
+          <div id="script-content" class="script"></div>
+        </div>
+
+        <div class="card" id="storyboard-card" hidden>
+          <div class="card__header">
+            <h2 class="card__title">分鏡示意</h2>
+            <div class="card__actions">
+              <button class="btn btn--secondary storyboard-platform" data-platform="threads_reel">脆 30s</button>
+              <button class="btn btn--secondary storyboard-platform" data-platform="ig_reels">IG Reels 60s</button>
+            </div>
+          </div>
+          <div id="storyboard-status" class="status"></div>
+          <div id="storyboard-list" class="storyboard"></div>
+        </div>
+      </section>
+
+      <!-- Tab 3: 成效追蹤 -->
+      <section id="tab-tracking" class="tab">
+        <div class="card">
+          <div class="card__header">
+            <h2 class="card__title">新增發布記錄</h2>
+          </div>
+          <form id="tracking-form" class="form-inline">
+            <input id="tracking-script-id" class="control" type="text" placeholder="script_id" required>
+            <select id="tracking-platform" class="control">
+              <option value="threads_reel">threads_reel</option>
+              <option value="ig_reels">ig_reels</option>
+              <option value="threads_post">threads_post</option>
+            </select>
+            <input id="tracking-url" class="control" type="url" placeholder="https://..." required>
+            <button class="btn btn--primary" type="submit">儲存</button>
+          </form>
+          <div id="tracking-status" class="status"></div>
+        </div>
+
+        <div class="card">
+          <div class="card__header">
+            <h2 class="card__title">查詢成效</h2>
+          </div>
+          <form id="metrics-form" class="form-inline">
+            <input id="metrics-tracking-id" class="control" type="text" placeholder="tracking_id" required>
+            <button class="btn btn--secondary" type="submit">查詢</button>
+          </form>
+          <div id="metrics-result" class="metrics"></div>
+        </div>
+      </section>
+
+      <!-- Tab 4: 品牌 DNA -->
+      <section id="tab-dna" class="tab">
+        <div class="card">
+          <div class="card__header">
+            <h2 class="card__title">品牌爆款 DNA</h2>
+            <button id="dna-refresh" class="btn btn--primary">計算 DNA</button>
+          </div>
+          <div id="dna-status" class="status"></div>
+          <div id="dna-result" class="dna"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script type="module" src="/static/js/common.js"></script>
+  <script type="module" src="/static/js/dashboard.js"></script>
+  <script type="module" src="/static/js/tracking.js"></script>
 </body>
 </html>
