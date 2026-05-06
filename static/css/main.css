@@ -17,6 +17,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* hidden 屬性必須勝過任何 display:flex/grid（CSS gotcha） */
+[hidden] { display: none !important; }
+
 html, body { margin: 0; padding: 0; }
 
 body {
