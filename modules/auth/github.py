@@ -256,7 +256,7 @@ def env_info() -> dict:
 
 
 def _exchange_code_for_token(code: str, redirect_uri: str) -> str:
-    """換 access_token。失敗拋 RuntimeError。"""
+    """換 access_token。失敗拋 RuntimeError，並 log GitHub 回的錯誤代碼（不含 token）。"""
     payload = {
         "client_id": settings.GITHUB_CLIENT_ID,
         "client_secret": settings.GITHUB_CLIENT_SECRET,
@@ -270,10 +270,19 @@ def _exchange_code_for_token(code: str, redirect_uri: str) -> str:
         data = r.json()
     token = data.get("access_token")
     if not token:
-        raise RuntimeError(
-            f"github_no_access_token error={data.get('error', 'unknown')}"
+        # 安全地 log GitHub 的錯誤訊息（不含 token、不含 secret）
+        gh_error = data.get("error", "unknown")
+        gh_desc = (data.get("error_description") or "")[:200]
+        logger.error(
+            "github.token_exchange gh_error=%s gh_desc=%s redirect_uri=%s client_id_set=%s secret_set=%s",
+            gh_error,
+            gh_desc,
+            redirect_uri,
+            bool(settings.GITHUB_CLIENT_ID),
+            bool(settings.GITHUB_CLIENT_SECRET),
         )
-    return token  # 不寫進 log（rule-auth）
+        raise RuntimeError(f"github_no_access_token error={gh_error}")
+    return token  # access_token 不寫進 log（rule-auth）
 
 
 def _fetch_github_username(token: str) -> str:
