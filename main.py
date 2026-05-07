@@ -8,13 +8,14 @@ Phase 5：掛 module router + 集中 error handler + APScheduler 排程
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -114,6 +115,9 @@ async def add_security_headers(request, call_next):
     response = await call_next(request)
     for k, v in _SECURITY_HEADERS.items():
         response.headers.setdefault(k, v)
+    # 靜態檔短 TTL：60 秒內讀快取，超過會 revalidate（部署 1 分鐘內全使用者拿到新版）
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=60, must-revalidate"
     return response
 
 
@@ -227,9 +231,23 @@ app.include_router(tracking_router)
 # --- 靜態檔 ---
 
 _STATIC_DIR = Path(__file__).parent / "static"
+# 用 Cloud Run revision 當 cache-busting 版本（每次部署自動換新）
+_ASSET_VERSION = os.getenv("K_REVISION", "dev")
+
 if _STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
     @app.get("/")
-    def index() -> FileResponse:
-        return FileResponse(_STATIC_DIR / "index.html")
+    def index() -> Response:
+        # 1. index.html 永遠不快取
+        # 2. 把 ?v=DEV 換成當前 revision，強制瀏覽器重抓 JS/CSS
+        html = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace("?v=DEV", f"?v={_ASSET_VERSION}")
+        return Response(
+            content=html,
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )

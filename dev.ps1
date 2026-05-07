@@ -1,4 +1,4 @@
-# ScriptFlow 本機開發啟動腳本
+﻿# ScriptFlow 本機開發啟動腳本
 #
 # 用法：
 #   ./dev.ps1                   # 預設 port 8086，mock LLM/Image/Crawler（不燒 API 費用）

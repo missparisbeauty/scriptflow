@@ -96,6 +96,11 @@ export const saveTracking = ({ script_id, platform, publish_url }) =>
 export const getMetrics = (tracking_id) =>
   _fetch("GET", `/api/v1/tracking/${encodeURIComponent(tracking_id)}/metrics`);
 
+export const updateMetrics = ({ tracking_id, metrics_field, metrics }) =>
+  _fetch("POST", `/api/v1/tracking/${encodeURIComponent(tracking_id)}/metrics`, {
+    body: { metrics_field, metrics },
+  });
+
 export const getDna = () => _fetch("GET", "/api/v1/tracking/dna");
 
 // --- Scheduler ---

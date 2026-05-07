@@ -323,6 +323,9 @@ function setup() {
   document.querySelectorAll(".storyboard-platform").forEach((btn) => {
     btn.addEventListener("click", () => doGenerateStoryboard(btn.dataset.platform));
   });
+  // 切分類或策略 → 自動重新載入候選
+  document.getElementById("candidates-category")?.addEventListener("change", loadCandidates);
+  document.getElementById("candidates-strategy")?.addEventListener("change", loadCandidates);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

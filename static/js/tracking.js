@@ -4,6 +4,7 @@ import {
   getDna,
   getMetrics,
   saveTracking,
+  updateMetrics,
 } from "/static/js/api.js";
 import {
   handleApiError,
@@ -185,10 +186,52 @@ async function onDnaRefresh() {
 }
 
 
+// --- 更新成效數據 ---
+
+async function onMetricsUpdateSubmit(e) {
+  e.preventDefault();
+  const tracking_id = document.getElementById("metrics-update-tracking-id").value.trim();
+  const metrics_field = document.getElementById("metrics-update-window").value;
+
+  // 收集所有有填的欄位（跳過空值）
+  const metrics = {};
+  document.querySelectorAll(".metrics-input").forEach((input) => {
+    const value = input.value.trim();
+    if (value === "") return;
+    const key = input.dataset.key;
+    const num = Number(value);
+    if (!Number.isNaN(num)) metrics[key] = num;
+  });
+
+  if (Object.keys(metrics).length === 0) {
+    toast("請至少填一個數據欄位", "error");
+    return;
+  }
+
+  const submit = e.target.querySelector("button[type=submit]");
+  if (submit) submit.disabled = true;
+  setStatus("metrics-update-status", "loading", "上傳中…");
+  try {
+    await updateMetrics({ tracking_id, metrics_field, metrics });
+    const windowLabel = metrics_field === "metrics_7d" ? "7 天" : "14 天";
+    toast(`已更新 ${windowLabel} 成效（${Object.keys(metrics).length} 個欄位）`, "success");
+    setStatus("metrics-update-status", "success", `已更新 ${tracking_id} 的 ${windowLabel} 成效`);
+    // 清空輸入框（保留 tracking_id 方便連續輸入）
+    document.querySelectorAll(".metrics-input").forEach((i) => (i.value = ""));
+  } catch (err) {
+    handleApiError(err);
+    setStatus("metrics-update-status", "error", err.message || "上傳失敗");
+  } finally {
+    if (submit) submit.disabled = false;
+  }
+}
+
+
 // --- Init ---
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("tracking-form")?.addEventListener("submit", onTrackingSubmit);
   document.getElementById("metrics-form")?.addEventListener("submit", onMetricsSubmit);
+  document.getElementById("metrics-update-form")?.addEventListener("submit", onMetricsUpdateSubmit);
   document.getElementById("dna-refresh")?.addEventListener("click", onDnaRefresh);
 });
