@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any
 
 import httpx
@@ -51,6 +52,33 @@ _CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "美妝": ["彩妝", "保養", "化妝品"],
     "美食": ["美食", "食譜", "便當"],
 }
+
+# --- 語言過濾（只留中文圈內容） ---
+# CJK 漢字（中日韓共用，但日韓會搭配各自的特殊字元）
+_CJK_RE = re.compile(r"[一-鿿]")
+# 日文平假名 + 片假名（出現即判定為日文，排除）
+_JAPANESE_KANA_RE = re.compile(r"[぀-ゟ゠-ヿ]")
+# 韓文諺文（出現即判定為韓文，排除）
+_KOREAN_RE = re.compile(r"[가-힯]")
+# 純英文判斷：去掉空白/標點/數字後，剩下的全是 ASCII
+_NON_LETTER_RE = re.compile(r"[\s\W\d#@_]+")
+
+
+def _is_chinese_content(text: str) -> bool:
+    """判斷文字是否為中文（繁體/簡體）。
+
+    規則：
+      ✓ 必須包含 CJK 漢字
+      ✗ 不能含日文假名（あ-ん、ア-ン）
+      ✗ 不能含韓文諺文（가-힣）
+    """
+    if not text:
+        return False
+    if _JAPANESE_KANA_RE.search(text):
+        return False
+    if _KOREAN_RE.search(text):
+        return False
+    return bool(_CJK_RE.search(text))
 
 
 # --- 對外 API ---
@@ -136,18 +164,28 @@ def _real_fetch_hot_content(
         # 整體 actor 呼叫失敗也 fallback 到 mock，不擋住爬蟲流程
         return _mock_fetch_hot_content(platform, category, hours, limit)
 
-    mapped = [
-        m for m in (_map_actor_item(platform, raw) for raw in items[:limit])
-        if m is not None
+    # 1. 映射欄位 → 2. 語言過濾（只留中文圈）→ 3. 取前 limit 筆
+    raw_mapped = [_map_actor_item(platform, raw) for raw in items]
+    chinese_only = [
+        m for m in raw_mapped if m is not None and _is_chinese_content(m["title"])
     ]
+    final = chinese_only[:limit]
     logger.info(
-        "crawler.apify_ok platform=%s actor=%s in=%d out=%d",
+        "crawler.apify_ok platform=%s actor=%s raw=%d chinese=%d kept=%d",
         platform,
         actor_id,
         len(items),
-        len(mapped),
+        len(chinese_only),
+        len(final),
     )
-    return mapped
+    # 過濾後若為空（例如該關鍵字幾乎沒中文內容）→ fallback 到 mock 確保前端有東西看
+    if not final:
+        logger.warning(
+            "crawler.no_chinese_results platform=%s — fallback to mock",
+            platform,
+        )
+        return _mock_fetch_hot_content(platform, category, hours, limit)
+    return final
 
 
 def _call_apify_actor(actor_id: str, actor_input: dict) -> list[dict]:
@@ -167,29 +205,34 @@ def _call_apify_actor(actor_id: str, actor_input: dict) -> list[dict]:
 def _build_actor_input(
     platform: str, *, keywords: list[str], limit: int
 ) -> dict[str, Any]:
-    """組 actor input。各 actor schema 不一樣，這裡集中映射。"""
+    """組 actor input。各 actor schema 不一樣，這裡集中映射。
+
+    多取 3 倍量，因為後處理會過濾掉非中文內容。
+    """
+    over_fetch = max(limit * 3, 30)
     if platform == "douyin":
-        # clockworks/free-tiktok-scraper 接受 hashtags
+        # clockworks/free-tiktok-scraper：proxyCountryCode 走台灣 IP，
+        # 增加抓到中文圈內容的機率
         return {
             "hashtags": keywords,
-            "resultsPerPage": limit,
+            "resultsPerPage": over_fetch,
+            "proxyCountryCode": "TW",
             "shouldDownloadVideos": False,
             "shouldDownloadCovers": False,
             "shouldDownloadSubtitles": False,
         }
     if platform == "xiaohongshu":
-        # 大部分小紅書 actor 接受 keyword/keywords
         return {
             "keyword": keywords[0],
             "keywords": keywords,
-            "maxItems": limit,
+            "maxItems": over_fetch,
         }
     if platform == "threads":
         return {
             "search_keyword": keywords[0],
-            "max_posts": limit,
+            "max_posts": over_fetch,
         }
-    return {"keywords": keywords, "limit": limit}
+    return {"keywords": keywords, "limit": over_fetch}
 
 
 def _map_actor_item(platform: str, raw: dict) -> dict | None:
