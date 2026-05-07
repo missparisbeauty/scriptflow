@@ -110,8 +110,9 @@ function renderRecentCandidates(payload) {
     meta.appendChild(banner);
   }
 
+  const strategyLabel = payload.strategy === "hotness" ? "熱門優先（純看互動數）" : "平衡型（互動×主題符合度）";
   meta.appendChild(el("span", null,
-    `顯示最近 ${payload.days} 天的候選（每天保留，超過 ${payload.days} 天會自動清除）`
+    `顯示最近 ${payload.days} 天的候選 ｜ 排序：${strategyLabel} ｜ 每天保留，超過 ${payload.days} 天自動清除`
   ));
 
   // 把所有 docs 攤平成「最後一次設定 lastCandidate」用，方便舊邏輯相容
@@ -239,9 +240,10 @@ function _onPickCandidate(ctx) {
 
 async function loadCandidates() {
   const category = document.getElementById("candidates-category").value;
+  const strategy = document.getElementById("candidates-strategy").value;
   setStatus("candidates-status", "loading", "載入中…");
   try {
-    const payload = await getRecentCandidates({ days: 5, category });
+    const payload = await getRecentCandidates({ days: 5, category, strategy });
     renderRecentCandidates(payload);
     setStatus("candidates-status", "success", "");
   } catch (e) {

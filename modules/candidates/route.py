@@ -38,6 +38,7 @@ def list_today(
 def list_recent(
     days: int = Query(5, ge=1, le=30),
     category: str | None = Query(None, max_length=20),
+    strategy: Strategy = Query("balanced"),
 ) -> dict:
-    data = get_recent_candidates(days=days, category=category)
+    data = get_recent_candidates(days=days, category=category, strategy=strategy)
     return ok(data)

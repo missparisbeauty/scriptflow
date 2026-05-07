@@ -74,8 +74,8 @@ export const getCandidates = ({ category, strategy = "balanced" } = {}) => {
   return _fetch("GET", `/api/v1/candidates?${qs}`);
 };
 
-export const getRecentCandidates = ({ days = 5, category } = {}) => {
-  const qs = new URLSearchParams({ days: String(days) });
+export const getRecentCandidates = ({ days = 5, category, strategy = "balanced" } = {}) => {
+  const qs = new URLSearchParams({ days: String(days), strategy });
   if (category) qs.set("category", category);
   return _fetch("GET", `/api/v1/candidates/recent?${qs}`);
 };

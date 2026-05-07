@@ -69,15 +69,17 @@ def get_recent_candidates(
     *,
     days: int = 5,
     category: str | None = None,
+    strategy: str = "balanced",
 ) -> dict:
     """取最近 N 天的候選（依日期由近到遠回傳）。
 
     Args:
         days: 1~30
         category: 限定分類；None = 所有分類
+        strategy: "balanced" 或 "hotness"。會對每個 doc 內的 items 即時重排。
 
     Returns:
-        {"days": N, "buckets": [
+        {"days": N, "strategy": "...", "buckets": [
             {"date": "2026-05-07", "docs": [doc, doc, ...]},
             {"date": "2026-05-06", "docs": [...]},
             ...
@@ -85,6 +87,8 @@ def get_recent_candidates(
     """
     if not 1 <= days <= MAX_RECENT_DAYS:
         raise InvalidInput(f"days must be 1..{MAX_RECENT_DAYS}, got {days}")
+    if strategy not in VALID_STRATEGIES:
+        raise InvalidInput(f"strategy must be one of {VALID_STRATEGIES}")
     if category is not None and not categories.is_valid_category(category):
         raise InvalidInput(f"invalid category: {category}")
 
@@ -97,8 +101,29 @@ def get_recent_candidates(
             docs = [doc] if doc else []
         else:
             docs = fs.list_candidates_by_date(d)
+        # 依策略對每個 doc 內的 items 即時重排（不寫回 Firestore）
+        for doc in docs:
+            if isinstance(doc.get("items"), list):
+                doc["items"] = _resort_items(doc["items"], strategy=strategy)
         buckets.append({"date": d, "docs": docs})
-    return {"days": days, "buckets": buckets}
+    return {"days": days, "strategy": strategy, "buckets": buckets}
+
+
+def _resort_items(items: list[dict], *, strategy: str) -> list[dict]:
+    """依策略對 items 重排並補 rank。"""
+    if strategy == "hotness":
+        key = lambda x: x.get("engagement", 0) or 0
+    else:  # balanced
+        def key(x: dict) -> float:
+            return float(
+                (x.get("engagement", 0) or 0)
+                * (0.5 + (x.get("topic_match", 0) or 0))
+            )
+    sorted_items = sorted(items, key=key, reverse=True)
+    # 重新標 rank（1, 2, 3, ...）
+    for i, it in enumerate(sorted_items, start=1):
+        it["rank"] = i
+    return sorted_items
 
 
 # --- 跨模組公開（ScriptService 用） ---
