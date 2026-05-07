@@ -33,8 +33,11 @@ logger = logging.getLogger(__name__)
 # --- 設定 ---
 
 MODEL_NAME = "gpt-5-mini"
-DEFAULT_MAX_TOKENS = 2000
-DEFAULT_TIMEOUT_SECONDS = 60
+# GPT-5-mini 是 reasoning model，內部思考也會消耗 token。
+# 需給足空間：reasoning tokens + 實際輸出 tokens 都從 max_completion_tokens 扣。
+# 觀測：reasoning 約吃 2000-3000，輸出腳本約 1000-1500 → 預留 8000 安全邊際。
+DEFAULT_MAX_TOKENS = 8000
+DEFAULT_TIMEOUT_SECONDS = 90  # reasoning model 較慢，timeout 也加長
 MAX_RETRIES = 2  # spec F3：「最多重試 2 次」
 DNA_MIN_SAMPLES = 5  # spec F6：< 5 支 → INSUFFICIENT_DATA
 
