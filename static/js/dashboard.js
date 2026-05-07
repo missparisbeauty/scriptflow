@@ -39,6 +39,32 @@ function fmtNumber(n) {
   return n.toLocaleString();
 }
 
+// 漏斗角色中文化
+const FUNNEL_ROLE_LABEL = {
+  seed: "種子",
+  pull: "拉新",
+  push: "推進",
+  mid: "中段",
+  harvest: "變現",
+};
+
+// CTA 類型中文化
+const CTA_TYPE_LABEL = {
+  story_link: "限動連結",
+  dm_keyword: "私訊關鍵字",
+  comment_engage: "留言互動",
+};
+
+// 平台中文化
+const PLATFORM_LABEL = {
+  douyin: "抖音",
+  xiaohongshu: "小紅書",
+  threads: "Threads",
+  threads_post: "Threads 純文字",
+  threads_reel: "脆 30 秒",
+  ig_reels: "IG Reels 60 秒",
+};
+
 
 // --- Candidates Tab ---
 
@@ -68,16 +94,18 @@ function renderCandidates(doc) {
 
   for (const item of items) {
     const card = el("div", "cand");
-    card.appendChild(el("div", "cand__rank", `#${item.rank ?? "?"} · ${item.platform || "?"}`));
-    card.appendChild(el("div", "cand__title", item.title || "(no title)"));
+    const platformZh = PLATFORM_LABEL[item.platform] || item.platform || "?";
+    card.appendChild(el("div", "cand__rank", `#${item.rank ?? "?"} · ${platformZh}`));
+    card.appendChild(el("div", "cand__title", item.title || "(無標題)"));
     const metaRow = el("div", "cand__meta");
-    metaRow.appendChild(el("span", null, `engagement ${fmtNumber(item.engagement)}`));
-    metaRow.appendChild(el("span", null, `topic_match ${item.topic_match ?? "?"}`));
-    metaRow.appendChild(el("span", null, `intent ${item.purchase_intent_density ?? "?"}`));
+    metaRow.appendChild(el("span", null, `互動數 ${fmtNumber(item.engagement)}`));
+    metaRow.appendChild(el("span", null, `主題符合度 ${item.topic_match ?? "?"}`));
+    metaRow.appendChild(el("span", null, `購買意圖 ${item.purchase_intent_density ?? "?"}`));
     card.appendChild(metaRow);
 
     if (item.funnel_role) {
-      const role = el("span", `cand__role cand__role--${item.funnel_role}`, item.funnel_role);
+      const roleLabel = FUNNEL_ROLE_LABEL[item.funnel_role] || item.funnel_role;
+      const role = el("span", `cand__role cand__role--${item.funnel_role}`, roleLabel);
       card.appendChild(role);
     }
     list.appendChild(card);
@@ -137,7 +165,7 @@ function renderScript(script) {
   if (!script) return;
 
   const header = el("div", "meta",
-    `script_id: ${script.script_id} | category: ${script.category} | topic: ${script.topic || "(無)"}`);
+    `腳本 ID：${script.script_id} ｜ 分類：${script.category} ｜ 主題：${script.topic || "(無)"}`);
   root.appendChild(header);
 
   const versionMap = [
@@ -159,7 +187,7 @@ function renderScript(script) {
       const lines = v.segments.map((s) =>
         `[${s.time || "?"}] ${s.scene || ""}\n  口白：${s.voiceover || ""}\n  音效：${s.sfx || ""}`
       );
-      if (v.caption) lines.push(`\n📝 caption：${v.caption}`);
+      if (v.caption) lines.push(`\n📝 說明文字：${v.caption}`);
       if (Array.isArray(v.hashtags)) lines.push(`#${v.hashtags.join(" #")}`);
       body.textContent = lines.join("\n\n");
     }
@@ -169,7 +197,8 @@ function renderScript(script) {
     if (Array.isArray(v.cta_variants) && v.cta_variants.length) {
       const cta = el("div", "script__cta");
       for (const c of v.cta_variants) {
-        cta.appendChild(el("div", "script__cta-item", `[${c.type}] ${c.text}`));
+        const typeLabel = CTA_TYPE_LABEL[c.type] || c.type;
+        cta.appendChild(el("div", "script__cta-item", `[${typeLabel}] ${c.text}`));
       }
       card.appendChild(cta);
     }

@@ -53,8 +53,8 @@
                 <option value="美食">美食</option>
               </select>
               <select id="candidates-strategy" class="control">
-                <option value="balanced">balanced</option>
-                <option value="hotness">hotness</option>
+                <option value="balanced">平衡型</option>
+                <option value="hotness">熱門優先</option>
               </select>
               <button id="candidates-refresh" class="btn btn--secondary">重新載入</button>
               <button id="candidates-trigger" class="btn btn--primary">觸發爬取</button>
@@ -104,11 +104,11 @@
             <h2 class="card__title">新增發布記錄</h2>
           </div>
           <form id="tracking-form" class="form-inline">
-            <input id="tracking-script-id" class="control" type="text" placeholder="script_id" required>
+            <input id="tracking-script-id" class="control" type="text" placeholder="腳本 ID" required>
             <select id="tracking-platform" class="control">
-              <option value="threads_reel">threads_reel</option>
-              <option value="ig_reels">ig_reels</option>
-              <option value="threads_post">threads_post</option>
+              <option value="threads_reel">脆 30 秒</option>
+              <option value="ig_reels">IG Reels 60 秒</option>
+              <option value="threads_post">Threads 純文字</option>
             </select>
             <input id="tracking-url" class="control" type="url" placeholder="https://..." required>
             <button class="btn btn--primary" type="submit">儲存</button>
@@ -121,7 +121,7 @@
             <h2 class="card__title">查詢成效</h2>
           </div>
           <form id="metrics-form" class="form-inline">
-            <input id="metrics-tracking-id" class="control" type="text" placeholder="tracking_id" required>
+            <input id="metrics-tracking-id" class="control" type="text" placeholder="追蹤 ID" required>
             <button class="btn btn--secondary" type="submit">查詢</button>
           </form>
           <div id="metrics-result" class="metrics"></div>

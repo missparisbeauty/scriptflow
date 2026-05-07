@@ -37,7 +37,7 @@ async function onTrackingSubmit(e) {
   try {
     const data = await saveTracking({ script_id, platform, publish_url });
     toast(`已儲存 ${data.tracking_id}`, "success");
-    setStatus("tracking-status", "success", `tracking_id: ${data.tracking_id}`);
+    setStatus("tracking-status", "success", `追蹤 ID：${data.tracking_id}`);
     e.target.reset();
   } catch (err) {
     handleApiError(err);
@@ -50,18 +50,52 @@ async function onTrackingSubmit(e) {
 
 // --- 查詢成效 ---
 
+// 平台中文化（與 dashboard.js 同步）
+const PLATFORM_LABEL_TR = {
+  threads_post: "Threads 純文字",
+  threads_reel: "脆 30 秒",
+  ig_reels: "IG Reels 60 秒",
+};
+
+// 成效時間視窗中文化
+const WINDOW_LABEL = {
+  metrics_7d: "發布後 7 天",
+  metrics_14d: "發布後 14 天",
+};
+
+// 成效指標中文化
+const METRIC_LABEL = {
+  views: "觀看數",
+  likes: "按讚",
+  comments: "留言",
+  shares: "分享",
+  saves: "收藏",
+  reach: "觸及",
+  impressions: "曝光",
+  ctr: "點擊率",
+  click_through_rate: "點擊率",
+  completion_rate: "完看率",
+  watch_time: "平均觀看秒數",
+  engagement_rate: "互動率",
+  conversion_rate: "轉換率",
+  product_clicks: "產品點擊",
+  story_link_clicks: "限動連結點擊",
+  dm_count: "私訊次數",
+};
+
 function renderMetrics(data) {
   const root = document.getElementById("metrics-result");
   clear(root);
   if (!data) return;
 
-  const summary = el("div", "meta", `script_id: ${data.script_id} | platform: ${data.platform}`);
+  const platformZh = PLATFORM_LABEL_TR[data.platform] || data.platform;
+  const summary = el("div", "meta", `腳本 ID：${data.script_id} ｜ 平台：${platformZh}`);
   root.appendChild(summary);
 
   for (const window of ["metrics_7d", "metrics_14d"]) {
     const m = data[window];
     const block = el("div", "metrics");
-    const head = el("h4", null, window);
+    const head = el("h4", null, WINDOW_LABEL[window] || window);
     head.style.margin = "12px 0 6px";
     head.style.fontSize = "13px";
     block.appendChild(head);
@@ -70,7 +104,7 @@ function renderMetrics(data) {
     } else {
       for (const [k, v] of Object.entries(m)) {
         const row = el("div", "metrics__row");
-        row.appendChild(el("span", "metrics__label", k));
+        row.appendChild(el("span", "metrics__label", METRIC_LABEL[k] || k));
         row.appendChild(el("span", null, String(v)));
         block.appendChild(row);
       }
