@@ -151,6 +151,19 @@ body {
   background: #fef3c7; border-radius: 6px; font-size: 12px; color: #78350f;
 }
 
+/* --- Feedback (AI 優化建議) --- */
+.feedback { margin-top: 12px; }
+.feedback__card {
+  background: #f8fafc; border-left: 4px solid #6366f1;
+  padding: 14px 16px; border-radius: 6px;
+}
+.feedback__meta {
+  font-size: 12px; color: #64748b; margin-bottom: 10px;
+}
+.feedback__body {
+  white-space: pre-wrap; font-size: 14px; line-height: 1.7; color: #1e293b;
+}
+
 /* --- Status (loading / success / error) --- */
 .status { padding: 8px 0; font-size: 13px; }
 .status--loading { color: var(--text-muted); }

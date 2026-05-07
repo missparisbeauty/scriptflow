@@ -2,6 +2,7 @@
 
 import {
   getDna,
+  getFeedback,
   getMetrics,
   saveTracking,
   updateMetrics,
@@ -227,11 +228,60 @@ async function onMetricsUpdateSubmit(e) {
 }
 
 
+// --- AI 優化建議 ---
+
+async function onFeedbackSubmit(e) {
+  e.preventDefault();
+  const tracking_id = document.getElementById("feedback-tracking-id").value.trim();
+  const submit = e.target.querySelector("button[type=submit]");
+  const result = document.getElementById("feedback-result");
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "AI 分析中（30-60 秒）…";
+  }
+  setStatus("feedback-status", "loading", "AI 看數據給建議中…");
+  clear(result);
+
+  try {
+    const data = await getFeedback(tracking_id);
+    renderFeedback(data, result);
+    setStatus("feedback-status", "success", `已分析 ${tracking_id}`);
+  } catch (err) {
+    if (err.code === "INSUFFICIENT_DATA") {
+      setStatus("feedback-status", "error", "這支還沒填任何成效數據（在 ② 區先填）");
+    } else if (err.code === "RESOURCE_NOT_FOUND") {
+      setStatus("feedback-status", "error", "追蹤 ID 不存在");
+    } else {
+      handleApiError(err);
+      setStatus("feedback-status", "error", err.message || "AI 分析失敗");
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = "AI 分析給建議";
+    }
+  }
+}
+
+function renderFeedback(data, root) {
+  if (!data || !data.analysis) return;
+  const card = el("div", "feedback__card");
+  const head = el("div", "feedback__meta",
+    `腳本 ID：${data.script_id || "?"} ｜ 平台：${data.platform || "?"}`);
+  card.appendChild(head);
+  const body = el("div", "feedback__body");
+  body.textContent = data.analysis; // 純文字（rule-frontend：LLM 輸出絕不 innerHTML）
+  card.appendChild(body);
+  root.appendChild(card);
+}
+
+
 // --- Init ---
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("tracking-form")?.addEventListener("submit", onTrackingSubmit);
   document.getElementById("metrics-form")?.addEventListener("submit", onMetricsSubmit);
   document.getElementById("metrics-update-form")?.addEventListener("submit", onMetricsUpdateSubmit);
+  document.getElementById("feedback-form")?.addEventListener("submit", onFeedbackSubmit);
   document.getElementById("dna-refresh")?.addEventListener("click", onDnaRefresh);
 });

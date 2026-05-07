@@ -101,6 +101,12 @@ export const updateMetrics = ({ tracking_id, metrics_field, metrics }) =>
     body: { metrics_field, metrics },
   });
 
+// AI 看數據給建議（LLM 端點，無 timeout）
+export const getFeedback = (tracking_id) =>
+  _fetch("POST", `/api/v1/tracking/${encodeURIComponent(tracking_id)}/feedback`, {
+    timeoutMs: LLM_TIMEOUT_MS,
+  });
+
 export const getDna = () => _fetch("GET", "/api/v1/tracking/dna");
 
 // --- Scheduler ---

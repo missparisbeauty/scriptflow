@@ -351,3 +351,78 @@ def build_system_prompt(
     if brand == "missparis":
         return MISSPARIS_SYSTEM_PROMPT.format(topic=topic)
     return SYSTEM_PROMPT.format(category=category, topic=topic)
+
+
+# === 成效回饋分析 prompt（Tab 3 ④ AI 優化建議用） ====================
+
+FEEDBACK_SYSTEM_PROMPT = """你是 MissParis 短影音變現顧問。
+
+你的任務：根據實際發布後的成效數據，告訴我這支影片：
+  - 哪部分腳本「有效」（成效數據反映出哪一段策略奏效）
+  - 哪部分需要「優化」（哪個指標偏低、可能對應腳本哪一段問題）
+  - 下次寫腳本的 3 個「具體改善方向」（不是廢話，是可執行的調整）
+
+---
+品牌邏輯：
+  - 4 角色：Fumo（老闆台語/懷疑質問）、Rock（髮型師/專業比喻）、Polo（策劃/吐槽）、阿翔（倉管素人）
+  - 3 腳本類型：traffic（hook 為主）、trust（知識信任）、harvest（強 CTA 導購）
+  - 主 CTA：置頂連結
+
+指標對應策略邏輯（你判斷的依據）：
+  - 完看率低 → hook 不夠強、節奏拖、轉折不明
+  - CTR / 連結點擊低 → CTA 不夠誘人、產品價值沒講清楚
+  - 留言/分享高但 CTR 低 → 內容好但沒導購（從 traffic 升級到 harvest）
+  - 觀看高但完看率低 → hook 釣到流量但沒留住人
+  - 收藏高 → 知識型內容加分（trust 路線）
+
+---
+規則：
+  - 用繁體中文，務實口吻，不要客套話
+  - 控制在 400 字內
+  - 每個建議都要對應到「具體腳本元素」（哪個角色、哪一段、用什麼修辭）
+  - 不要說「需要更多努力」這種廢話"""
+
+
+FEEDBACK_USER_TEMPLATE = """這支影片的數據：
+
+【基本資訊】
+- 平台：{platform_label}
+- 腳本類型：{script_type}
+- 主題：{topic}
+- 分類：{category}
+
+【腳本內容（節錄）】
+{script_excerpt}
+
+【實際成效數據】
+{metrics_block}
+
+請依品牌邏輯給我：
+1. 數據反映「腳本哪部分成功」（具體到角色/段落）
+2. 數據反映「腳本哪部分失敗」（對應指標 + 原因推論）
+3. 下次寫腳本的 3 個具體改善方向"""
+
+
+def build_feedback_system_prompt() -> str:
+    """成效分析 system prompt（無變數）。"""
+    return FEEDBACK_SYSTEM_PROMPT
+
+
+def build_feedback_user_prompt(
+    *,
+    platform_label: str,
+    script_type: str,
+    topic: str,
+    category: str,
+    script_excerpt: str,
+    metrics_block: str,
+) -> str:
+    """組合成效分析 user prompt。"""
+    return FEEDBACK_USER_TEMPLATE.format(
+        platform_label=platform_label,
+        script_type=script_type,
+        topic=topic or "(未填)",
+        category=category,
+        script_excerpt=script_excerpt or "(無腳本內容)",
+        metrics_block=metrics_block or "(無數據)",
+    )
