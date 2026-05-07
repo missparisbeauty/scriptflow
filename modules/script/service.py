@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -164,8 +165,13 @@ def _generate_one_version(
         ) from e
 
     try:
-        parsed = json.loads(raw)
+        parsed = _parse_llm_json(raw)
     except json.JSONDecodeError as e:
+        logger.warning(
+            "llm json parse failed template=%s raw_preview=%r",
+            template_key,
+            (raw or "")[:200],
+        )
         raise ScriptGenerationFailed(
             f"LLM returned non-JSON for {template_key}",
             template=template_key,
@@ -206,6 +212,51 @@ def _build_candidates_summary(docs: list[dict]) -> str:
                 f"funnel={item.get('funnel_role','?')})"
             )
     return "\n".join(lines) if lines else "(no candidates)"
+
+
+def _parse_llm_json(raw: str) -> dict:
+    """LLM 偶爾會把 JSON 包在 markdown code fence 或前後加額外文字 — 容錯解析。
+
+    解析順序：
+      1. 直接 json.loads（最常見，response_format=json_object 通常 OK）
+      2. 去掉 ```json ... ``` 或 ``` ... ``` 後再試
+      3. regex 抓第一個平衡 {...} 區塊
+    全部失敗則丟原 JSONDecodeError 給上層。
+    """
+    if not raw:
+        raise json.JSONDecodeError("empty response", "", 0)
+
+    # Step 1：直接解
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # Step 2：去 markdown code fence
+    cleaned = raw.strip()
+    fence_match = re.match(
+        r"^```(?:json)?\s*(.+?)\s*```$", cleaned, re.DOTALL | re.IGNORECASE
+    )
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Step 3：抓第一個 {...} 區塊（dotall）
+    brace_match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if brace_match:
+        try:
+            return json.loads(brace_match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    # 全失敗 → 拋原本錯誤訊息給上層 log
+    raise json.JSONDecodeError(
+        "LLM output not parseable as JSON after fence/brace cleanup",
+        raw[:100],
+        0,
+    )
 
 
 def _extract_text(parsed: dict) -> str:
