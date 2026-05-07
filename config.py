@@ -31,6 +31,7 @@ class Settings:
     ADMIN_PASSWORD: str = os.getenv("SF_ADMIN_PASSWORD", "")
     OPENAI_API_KEY: str = os.getenv("SF_OPENAI_API_KEY", "")
     CRAWLER_CREDENTIAL: Optional[str] = os.getenv("SF_CRAWLER_CREDENTIAL")
+    APIFY_TOKEN: str = os.getenv("SF_APIFY_TOKEN", "")
 
 
 settings = Settings()
