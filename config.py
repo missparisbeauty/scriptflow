@@ -33,5 +33,11 @@ class Settings:
     CRAWLER_CREDENTIAL: Optional[str] = os.getenv("SF_CRAWLER_CREDENTIAL")
     APIFY_TOKEN: str = os.getenv("SF_APIFY_TOKEN", "")
 
+    # --- GitHub OAuth ---
+    GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
+    GITHUB_CLIENT_SECRET: str = os.getenv("SF_GITHUB_CLIENT_SECRET", "")
+    # 允許登入的 GitHub username 清單（逗號分隔，例如 'missparisbeauty,partner1'）
+    ADMIN_GITHUB_USERS: str = os.getenv("ADMIN_GITHUB_USERS", "")
+
 
 settings = Settings()

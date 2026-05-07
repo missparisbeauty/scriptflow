@@ -10,7 +10,6 @@ import {
   AuthRequiredError,
   getSchedulerStatus,
   healthAuth,
-  login,
   logout,
 } from "/static/js/api.js";
 
@@ -81,23 +80,29 @@ function showApp() {
   _notifyAuth(true);
 }
 
-async function doLogin(password) {
+// 從 URL ?auth_error=xxx 讀錯誤代碼，顯示給使用者
+function _showAuthErrorFromUrl() {
+  const url = new URL(window.location.href);
+  const err = url.searchParams.get("auth_error");
+  if (!err) return;
   const errorEl = document.getElementById("login-error");
-  const submit = document.querySelector(".login__submit");
-  errorEl.hidden = true;
-  if (submit) submit.disabled = true;
-  try {
-    await login(password);
-    showApp();
-    toast("登入成功", "success");
-  } catch (e) {
-    errorEl.textContent = e instanceof ApiError && e.code === "AUTH_FAILED"
-      ? "密碼錯誤"
-      : `登入失敗：${e.message || e.code}`;
-    errorEl.hidden = false;
-  } finally {
-    if (submit) submit.disabled = false;
-  }
+  if (!errorEl) return;
+  const labels = {
+    not_authorized: "你的 GitHub 帳號沒有登入權限。請聯絡管理員加入白名單。",
+    state_mismatch: "登入流程被中斷（state 不匹配）。請重試。",
+    state_cookie_missing: "瀏覽器 cookie 被擋。請允許 cookie 後重試。",
+    missing_code_or_state: "登入流程不完整。請重試。",
+    token_exchange_failed: "GitHub token 換取失敗。請稍後再試。",
+    fetch_user_failed: "無法取得 GitHub 使用者資料。請重試。",
+    github_denied: "你拒絕了 GitHub 授權。",
+    github_not_configured: "後台尚未設定 GitHub OAuth。",
+    no_username: "GitHub 沒回傳 username。",
+  };
+  errorEl.textContent = labels[err] || `登入失敗：${err}`;
+  errorEl.hidden = false;
+  // 清掉 query string，避免重新整理時又顯示
+  url.searchParams.delete("auth_error");
+  window.history.replaceState({}, document.title, url.pathname + url.hash);
 }
 
 async function doLogout() {
@@ -160,17 +165,13 @@ async function refreshSchedulerStatus() {
 // --- Init ---
 
 function setupForms() {
-  document.getElementById("login-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const pwd = document.getElementById("login-password").value;
-    if (pwd) await doLogin(pwd);
-  });
   document.getElementById("logout-btn")?.addEventListener("click", doLogout);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   setupForms();
   setupTabs();
+  _showAuthErrorFromUrl();
   const authed = await checkSession();
   if (authed) {
     refreshSchedulerStatus();

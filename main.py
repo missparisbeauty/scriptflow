@@ -25,6 +25,7 @@ import scheduler
 from config import settings
 from domain.exceptions import ScriptFlowError
 from domain.responses import err, ok
+from modules.auth.github import router as auth_github_router
 from modules.auth.middleware import SessionMiddleware, require_session
 from modules.auth.route import router as auth_router
 from modules.candidates.route import router as candidates_router
@@ -221,6 +222,7 @@ def scheduler_status(session: dict = Depends(require_session)) -> dict:
 
 # auth router 不依賴 session（自己負責登入），其他都需要
 app.include_router(auth_router)
+app.include_router(auth_github_router)
 app.include_router(candidates_router)
 app.include_router(crawler_router)
 app.include_router(script_router)

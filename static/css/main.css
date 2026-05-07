@@ -61,6 +61,20 @@ body {
 .login__submit:disabled { opacity: 0.5; cursor: not-allowed; }
 .login__error { color: var(--danger); margin-top: 12px; font-size: 13px; }
 
+/* GitHub 登入按鈕 */
+.login__github {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-top: 12px; padding: 12px 16px;
+  background: #24292f; color: #fff; text-decoration: none;
+  border-radius: var(--radius); font-size: 14px; font-weight: 500;
+  transition: background 0.15s;
+}
+.login__github:hover { background: #1c2026; }
+.login__github-icon { display: inline-block; vertical-align: middle; }
+.login__hint {
+  margin-top: 12px; font-size: 12px; color: var(--text-muted); text-align: center;
+}
+
 /* --- App layout --- */
 .app { min-height: 100vh; }
 
