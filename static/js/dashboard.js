@@ -39,13 +39,11 @@ function fmtNumber(n) {
   return n.toLocaleString();
 }
 
-// 漏斗角色中文化
+// 漏斗角色中文化（與 domain/rules.py FUNNEL_ROLES 對齊：3 個角色）
 const FUNNEL_ROLE_LABEL = {
-  seed: "種子",
-  pull: "拉新",
-  push: "推進",
-  mid: "中段",
-  harvest: "變現",
+  seed: "種子",      // 種草／品牌印象
+  pull: "拉新",      // 引流／吸引點擊
+  harvest: "變現",   // 收割／轉換成交
 };
 
 // CTA 類型中文化
