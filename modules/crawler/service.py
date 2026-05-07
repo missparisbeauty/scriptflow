@@ -112,15 +112,30 @@ def _enrich(item: dict, category: str) -> dict:
 
 
 def _classify_role(item: dict) -> str:
-    """簡易漏斗角色推斷（Phase 7 可優化）。"""
-    if (
-        item.get("purchase_intent_density", 0)
-        >= rules.PURCHASE_INTENT_HARVEST_THRESHOLD
-    ):
-        return "harvest"
-    if item.get("topic_match", 0) >= 0.10:
-        return "pull"
-    return "seed"
+    """5 階段漏斗角色推斷（購買決策旅程）。
+
+    判斷順序（先比強訊號）：
+      1. purchase_intent ≥ 0.10  → decision    （決策，強烈購買訊號）
+      2. topic_match ≥ 0.10
+         + intent ≥ 0.05         → brand_value （看見品牌價值）
+         + intent < 0.05         → evaluation  （評估比價）
+      3. topic_match ≥ 0.05      → interest    （興趣）
+      4. 以上皆否                → awareness   （認知）
+
+    門檻定義在 domain/rules.py，調整門檻不需改本函式。
+    """
+    intent = item.get("purchase_intent_density", 0)
+    topic = item.get("topic_match", 0)
+
+    if intent >= rules.PURCHASE_INTENT_DECISION_THRESHOLD:
+        return "decision"
+    if topic >= rules.TOPIC_MATCH_EVALUATION_THRESHOLD:
+        if intent >= rules.PURCHASE_INTENT_BRAND_THRESHOLD:
+            return "brand_value"
+        return "evaluation"
+    if topic >= rules.TOPIC_MATCH_INTEREST_THRESHOLD:
+        return "interest"
+    return "awareness"
 
 
 def _select_top(items: list[dict], *, strategy: str, n: int) -> list[dict]:

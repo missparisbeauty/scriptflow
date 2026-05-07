@@ -39,11 +39,17 @@ function fmtNumber(n) {
   return n.toLocaleString();
 }
 
-// 漏斗角色中文化（與 domain/rules.py FUNNEL_ROLES 對齊：3 個角色）
+// 漏斗角色中文化（與 domain/rules.py FUNNEL_ROLES 對齊：5 階段購買旅程）
 const FUNNEL_ROLE_LABEL = {
-  seed: "種子",      // 種草／品牌印象
-  pull: "拉新",      // 引流／吸引點擊
-  harvest: "變現",   // 收割／轉換成交
+  awareness: "認知",          // 純爆款引發注意
+  interest: "興趣",           // 觀眾注意此類產品
+  evaluation: "評估比價",     // 主題深入但無強購買訊號
+  brand_value: "看見品牌價值", // 主題相關 + 中等導購意味
+  decision: "決策",           // 強烈購買訊號
+  // 舊資料向下相容（Firestore 既有 docs 用 seed/pull/harvest）
+  seed: "認知",
+  pull: "興趣",
+  harvest: "決策",
 };
 
 // CTA 類型中文化

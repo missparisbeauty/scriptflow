@@ -1,7 +1,7 @@
 """跨模組共用業務規則 — Phase 1。
 
 提供：
-  - classify_funnel_role(): 漏斗角色分類（seed / pull / harvest）
+  - classify_funnel_role(): 漏斗角色分類（5 階段購買決策旅程）
   - compute_similarity(): 內容與分類的關鍵字重疊比例（0-1）
   - compute_purchase_intent_density(): 導購意圖詞密度（0-1）
 
@@ -15,30 +15,54 @@ from typing import Final
 
 from domain import categories as _categories
 
-# --- 漏斗角色 ---
+# --- 漏斗角色（5 階段購買決策旅程） ---
 
-FUNNEL_ROLES: Final = ("seed", "pull", "harvest")
-"""三個漏斗角色：
-  - seed:    種子，種草／品牌印象
-  - pull:    拉新，引流／吸引點擊
-  - harvest: 收割，轉換／成交
+FUNNEL_ROLES: Final = (
+    "awareness",    # 認知
+    "interest",     # 興趣
+    "evaluation",   # 評估比價
+    "brand_value",  # 看見品牌價值
+    "decision",     # 決策
+)
+"""五個漏斗角色：
+  - awareness:   認知，純爆款引發注意（與主題弱關聯）
+  - interest:    興趣，觀眾開始注意此類產品
+  - evaluation:  評估比價，主題深入但無強購買訊號
+  - brand_value: 看見品牌價值，主題相關 + 中等購買意圖
+  - decision:    決策，強烈購買訊號
 """
 
-# 同義詞映射（容許 service 傳遞中文/別名）
+# 同義詞映射（容許 service 傳遞中文/別名/舊系統 key）
 _FUNNEL_ALIASES: dict[str, str] = {
-    "seed": "seed",
-    "種子": "seed",
-    "種草": "seed",
-    "awareness": "seed",
-    "pull": "pull",
-    "拉新": "pull",
-    "引流": "pull",
-    "interest": "pull",
-    "harvest": "harvest",
-    "收割": "harvest",
-    "轉換": "harvest",
-    "conversion": "harvest",
-    "purchase": "harvest",
+    # awareness
+    "awareness": "awareness",
+    "認知": "awareness",
+    "seed": "awareness",       # 舊系統 seed 對應到 awareness
+    "種子": "awareness",
+    "種草": "awareness",
+    # interest
+    "interest": "interest",
+    "興趣": "interest",
+    "pull": "interest",        # 舊系統 pull 對應到 interest
+    "拉新": "interest",
+    "引流": "interest",
+    # evaluation
+    "evaluation": "evaluation",
+    "評估": "evaluation",
+    "評估比價": "evaluation",
+    "比價": "evaluation",
+    # brand_value
+    "brand_value": "brand_value",
+    "品牌價值": "brand_value",
+    "看見品牌價值": "brand_value",
+    # decision
+    "decision": "decision",
+    "決策": "decision",
+    "harvest": "decision",     # 舊系統 harvest 對應到 decision
+    "收割": "decision",
+    "轉換": "decision",
+    "conversion": "decision",
+    "purchase": "decision",
 }
 
 
@@ -126,5 +150,19 @@ def compute_purchase_intent_density(text: str) -> float:
 B_TRACK_SIMILARITY_THRESHOLD: Final = 0.80
 """B 軌相似度下限：相似度 ≥ 0.80 才視為合格的 B 軌候選。"""
 
-PURCHASE_INTENT_HARVEST_THRESHOLD: Final = 0.10
-"""導購意圖密度 ≥ 0.10 → funnel_role=harvest。"""
+# 漏斗角色判斷門檻（modules/crawler/service._classify_role 使用）
+TOPIC_MATCH_INTEREST_THRESHOLD: Final = 0.05
+"""topic_match ≥ 0.05 → 從 awareness 升到 interest（觀眾開始注意此類產品）。"""
+
+TOPIC_MATCH_EVALUATION_THRESHOLD: Final = 0.10
+"""topic_match ≥ 0.10 → 從 interest 升到 evaluation（深入討論主題）。"""
+
+PURCHASE_INTENT_BRAND_THRESHOLD: Final = 0.05
+"""purchase_intent ≥ 0.05 → 從 evaluation 升到 brand_value（中等導購）。"""
+
+PURCHASE_INTENT_DECISION_THRESHOLD: Final = 0.10
+"""purchase_intent ≥ 0.10 → 直接歸類為 decision（強烈購買訊號）。"""
+
+# Backward compat alias（舊程式可能還在用）
+PURCHASE_INTENT_HARVEST_THRESHOLD: Final = PURCHASE_INTENT_DECISION_THRESHOLD
+"""[Deprecated] 沿用舊名，請改用 PURCHASE_INTENT_DECISION_THRESHOLD。"""

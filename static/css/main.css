@@ -152,8 +152,15 @@ body {
   display: inline-block; padding: 2px 6px; border-radius: 4px;
   font-size: 11px; margin-top: 4px;
 }
-.cand__role--seed { background: #dbeafe; color: #1e40af; }
-.cand__role--pull { background: #fef3c7; color: #92400e; }
+/* 5 階段購買旅程顏色：認知 → 興趣 → 評估 → 品牌 → 決策（漸進加強） */
+.cand__role--awareness { background: #e0e7ff; color: #3730a3; }   /* 認知：淺紫 */
+.cand__role--interest { background: #dbeafe; color: #1e40af; }    /* 興趣：藍 */
+.cand__role--evaluation { background: #fef3c7; color: #92400e; }  /* 評估：黃 */
+.cand__role--brand_value { background: #fed7aa; color: #9a3412; } /* 品牌：橙 */
+.cand__role--decision { background: #dcfce7; color: #14532d; }    /* 決策：綠 */
+/* 舊資料向下相容（Firestore 既有 docs 用 seed/pull/harvest） */
+.cand__role--seed { background: #e0e7ff; color: #3730a3; }
+.cand__role--pull { background: #dbeafe; color: #1e40af; }
 .cand__role--harvest { background: #dcfce7; color: #14532d; }
 
 .meta { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
