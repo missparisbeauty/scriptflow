@@ -19,6 +19,7 @@ rule-auth：
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 from urllib.parse import urlencode
 
@@ -84,9 +85,27 @@ def _allowed_users() -> set[str]:
 
 
 def _redirect_uri_from(request: Request) -> str:
-    # 用 request 的 base URL 動態組（部署多環境也能跑）
-    base = str(request.base_url).rstrip("/")
-    return f"{base}/api/v1/auth/github/callback"
+    """組 redirect_uri，必須跟 GitHub OAuth App 設定完全一致。
+
+    在 Cloud Run 後端：
+      - 容器內收到的是 HTTP（內部 loopback）
+      - 真實協定在 X-Forwarded-Proto header
+      - 真實 host 在 X-Forwarded-Host 或 host header
+    優先用 FRONTEND_ORIGIN env 寫死（最穩），否則動態組。
+    """
+    # Option 1: 環境變數寫死（推薦）
+    frontend = os.getenv("FRONTEND_ORIGIN", "").rstrip("/")
+    if frontend:
+        return f"{frontend}/api/v1/auth/github/callback"
+
+    # Option 2: 從 forwarded headers 動態判斷（reverse proxy 友善）
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or request.url.netloc
+    )
+    return f"{proto}://{host}/api/v1/auth/github/callback"
 
 
 def _err_redirect(msg: str) -> RedirectResponse:
