@@ -118,8 +118,21 @@ async function checkSession() {
     return true;
   } catch (e) {
     showLogin();
+    await _maybeShowDevLogin();
     return false;
   }
+}
+
+// DEBUG 模式才顯示 DEV 一鍵登入按鈕
+async function _maybeShowDevLogin() {
+  try {
+    const res = await fetch("/api/v1/auth/github/env", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const data = (await res.json()).data || {};
+    if (data.is_debug) {
+      document.getElementById("login-dev-form")?.removeAttribute("hidden");
+    }
+  } catch { /* 取不到就靜默，預設只顯示 GitHub 按鈕 */ }
 }
 
 // --- Tab 切換 ---

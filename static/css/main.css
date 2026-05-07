@@ -75,6 +75,17 @@ body {
   margin-top: 12px; font-size: 12px; color: var(--text-muted); text-align: center;
 }
 
+/* DEV 一鍵登入（只在 DEBUG 顯示） */
+.login__dev { margin: 8px 0 0; }
+.login__dev-btn {
+  display: block; width: 100%;
+  padding: 8px 12px; cursor: pointer;
+  background: #fef3c7; color: #78350f;
+  border: 1px dashed #d97706; border-radius: var(--radius);
+  font-size: 12px; font-weight: 500;
+}
+.login__dev-btn:hover { background: #fde68a; }
+
 /* --- App layout --- */
 .app { min-height: 100vh; }
 

@@ -217,6 +217,41 @@ def callback(
     return resp
 
 
+# --- 本機開發專用：一鍵登入（生產不開放） ---
+
+
+@router.post("/dev-login")
+def dev_login() -> Response:
+    """DEBUG 模式下的一鍵登入 — 跳過 GitHub OAuth。
+
+    生產（DEBUG=False）時回 404，等同不存在。
+    """
+    if not settings.DEBUG:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="not found")
+
+    # 用白名單第一個 username，沒設就 "dev"
+    users = _allowed_users()
+    user_id = next(iter(users)) if users else "dev"
+
+    resp = RedirectResponse(url="/", status_code=303)
+    issue_session(resp, user_id=user_id)
+    logger.info("dev_login bypass user=%s (DEBUG only)", user_id)
+    return resp
+
+
+# --- 環境資訊（讓前端知道當前是不是 DEBUG）---
+
+
+@router.get("/env")
+def env_info() -> dict:
+    """前端用來判斷是否顯示 DEV 登入按鈕。"""
+    return {
+        "is_debug": bool(settings.DEBUG),
+        "github_configured": bool(settings.GITHUB_CLIENT_ID),
+    }
+
+
 # --- 內部：呼叫 GitHub API ---
 
 

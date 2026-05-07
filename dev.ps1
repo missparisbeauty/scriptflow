@@ -57,7 +57,7 @@ if (-not (Test-Path $secretFile)) {
 }
 $env:SF_SESSION_SECRET = (Get-Content $secretFile -Raw).Trim()
 
-# Admin password：預設 localdev，可用 -ResetPassword 重置
+# Admin password：預設 localdev（GitHub OAuth 已上線後僅備用）
 $pwdFile = ".\.devpassword"
 if ($ResetPassword -or (-not (Test-Path $pwdFile))) {
     $defaultPwd = "localdev"
@@ -66,6 +66,12 @@ if ($ResetPassword -or (-not (Test-Path $pwdFile))) {
 }
 $env:SF_ADMIN_PASSWORD = (Get-Content $pwdFile -Raw).Trim()
 
+# GitHub OAuth：本機 DEBUG 會顯示「DEV 一鍵登入」按鈕，免實際走 GitHub
+$env:ADMIN_GITHUB_USERS = "missparisbeauty"
+$env:GITHUB_CLIENT_ID = ""           # 本機不用實際走 GitHub，留空
+$env:SF_GITHUB_CLIENT_SECRET = ""    # 同上
+$env:FRONTEND_ORIGIN = "http://127.0.0.1:$Port"
+
 # --- 顯示資訊 ---
 $llmMode = if ($RealLLM) { "REAL OpenAI (費用計算中)" } else { "mock (不燒費用)" }
 Write-Host ""
@@ -73,7 +79,7 @@ Write-Host "==================================================" -ForegroundColor
 Write-Host "  ScriptFlow 本機開發伺服器" -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "  網址:   http://127.0.0.1:$Port" -ForegroundColor White
-Write-Host "  密碼:   $($env:SF_ADMIN_PASSWORD)" -ForegroundColor Yellow
+Write-Host "  登入:   點「DEV 一鍵登入」黃色按鈕（不用 GitHub）" -ForegroundColor Yellow
 Write-Host "  Docs:   http://127.0.0.1:$Port/docs" -ForegroundColor White
 Write-Host "  GCP:    $($env:GCP_PROJECT_ID) (Firestore via ADC)" -ForegroundColor White
 Write-Host "  LLM:    $llmMode" -ForegroundColor $(if ($RealLLM) { "Red" } else { "Green" })
