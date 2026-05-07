@@ -74,16 +74,32 @@ export const getCandidates = ({ category, strategy = "balanced" } = {}) => {
   return _fetch("GET", `/api/v1/candidates?${qs}`);
 };
 
+export const getRecentCandidates = ({ days = 5, category } = {}) => {
+  const qs = new URLSearchParams({ days: String(days) });
+  if (category) qs.set("category", category);
+  return _fetch("GET", `/api/v1/candidates/recent?${qs}`);
+};
+
 // --- Crawler ---
 export const triggerCrawler = ({ category, strategy = "balanced", hours = 24 }) =>
   _fetch("POST", "/api/v1/crawler/trigger", { body: { category, strategy, hours }, timeoutMs: 60_000 });
 
 // --- Script (LLM 端點，無 timeout) ---
-export const generateScript = ({ candidate_ids, category, script_type = "traffic" }) =>
-  _fetch("POST", "/api/v1/script/generate", {
-    body: { candidate_ids, category, script_type },
+export const generateScript = ({
+  candidate_ids,
+  category,
+  script_type = "traffic",
+  selected_item_index = null,
+}) => {
+  const body = { candidate_ids, category, script_type };
+  if (selected_item_index !== null && selected_item_index !== undefined) {
+    body.selected_item_index = selected_item_index;
+  }
+  return _fetch("POST", "/api/v1/script/generate", {
+    body,
     timeoutMs: LLM_TIMEOUT_MS,
   });
+};
 
 // --- Storyboard (LLM 端點，無 timeout) ---
 export const generateStoryboard = ({ script_id, platform }) =>

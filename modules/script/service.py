@@ -48,6 +48,7 @@ def generate(
     category: str,
     *,
     script_type: str = "traffic",
+    selected_item_index: int | None = None,
 ) -> dict:
     """生成三版本腳本。
 
@@ -76,6 +77,20 @@ def generate(
             f"no candidates found for ids: {candidate_ids}",
             candidate_ids=candidate_ids,
         )
+
+    # 選定特定 item → 把 doc.items 過濾到只剩那一篇
+    if selected_item_index is not None:
+        for doc in docs:
+            items = doc.get("items") or []
+            if 0 <= selected_item_index < len(items):
+                doc["items"] = [items[selected_item_index]]
+        # 過濾後可能某些 doc 沒 items，移除
+        docs = [d for d in docs if d.get("items")]
+        if not docs:
+            raise InvalidInput(
+                f"selected_item_index={selected_item_index} out of range",
+                candidate_ids=candidate_ids,
+            )
 
     topic = _pick_topic(docs)
     summary = _build_candidates_summary(docs)

@@ -17,6 +17,7 @@ from datetime import datetime, timezone, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from infra import firestore as fs
 from modules.crawler.service import run_daily_crawl
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ DAILY_HOUR = 9
 DAILY_MINUTE = 0
 TIMEZONE = "Asia/Taipei"  # GMT+8
 CATEGORIES = ("美妝", "美食", "髮品")
+RETAIN_DAYS = 5  # 候選保留天數，超過自動清理
 
 _scheduler: BackgroundScheduler | None = None
 
@@ -35,7 +37,7 @@ def is_enabled() -> bool:
 
 
 def daily_crawl_job() -> None:
-    """同時跑三個分類；單一失敗不中斷其他。"""
+    """同時跑三個分類；單一失敗不中斷其他。爬完順手清舊候選。"""
     for category in CATEGORIES:
         try:
             res = run_daily_crawl(category)
@@ -50,6 +52,22 @@ def daily_crawl_job() -> None:
                 category,
                 type(e).__name__,
             )
+    # 爬完後清掉超過 RETAIN_DAYS 的舊候選
+    cleanup_old_candidates_job()
+
+
+def cleanup_old_candidates_job() -> None:
+    """軟刪除 RETAIN_DAYS 天前的候選（每日跟著 daily_crawl 一起跑）。"""
+    try:
+        cutoff = (
+            datetime.now(timezone.utc).date() - timedelta(days=RETAIN_DAYS)
+        ).isoformat()
+        deleted = fs.delete_candidates_before(cutoff)
+        logger.info(
+            "scheduler.cleanup ok cutoff=%s deleted=%d", cutoff, deleted
+        )
+    except Exception as e:
+        logger.error("scheduler.cleanup failed err=%s", type(e).__name__)
 
 
 def start() -> BackgroundScheduler | None:

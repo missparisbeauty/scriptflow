@@ -195,6 +195,26 @@ def delete_candidate(candidate_id: str) -> None:
     _soft_delete(COL_CANDIDATES, candidate_id)
 
 
+def delete_candidates_before(date_iso: str) -> int:
+    """軟刪除所有 date < date_iso 的候選（保留期外的舊資料）。
+
+    Args:
+        date_iso: 'YYYY-MM-DD'，早於此日期（不含）的會被軟刪除
+
+    Returns:
+        被軟刪除的數量
+    """
+    docs = _query(COL_CANDIDATES, limit=500)
+    deleted = 0
+    for doc in docs:
+        d = doc.get("date")
+        doc_id = doc.get("id")
+        if d and doc_id and d < date_iso:
+            _soft_delete(COL_CANDIDATES, doc_id)
+            deleted += 1
+    return deleted
+
+
 # --- scripts collection ---
 
 
