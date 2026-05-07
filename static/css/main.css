@@ -186,6 +186,15 @@ body {
   display: inline-block; padding: 2px 6px; border-radius: 4px;
   font-size: 11px; margin-top: 4px;
 }
+/* Mock 模式警告 banner */
+.mock-banner {
+  display: block;
+  margin-bottom: 8px; padding: 10px 14px;
+  background: #fef3c7; color: #78350f;
+  border-left: 4px solid #f59e0b;
+  border-radius: 4px; font-size: 12px; line-height: 1.5;
+}
+
 /* 候選 5 天分組 */
 .day-section { margin-bottom: 28px; }
 .day-section__header {
@@ -202,10 +211,24 @@ body {
   font-size: 12px; color: var(--text-muted); margin: 6px 0 8px;
 }
 
-/* 候選卡片內的「用此篇」按鈕 */
+/* 候選卡片內的動作列 */
+.cand__actions {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+}
 .cand__pick {
-  margin-top: 8px; padding: 4px 10px;
-  font-size: 12px; width: 100%;
+  padding: 4px 10px; font-size: 12px; width: 100%;
+}
+.cand__url {
+  display: inline-block; padding: 4px 8px;
+  font-size: 11px; text-align: center;
+  color: #2563eb; text-decoration: none;
+  border: 1px solid #dbeafe; border-radius: 4px;
+  background: #eff6ff;
+}
+.cand__url:hover { background: #dbeafe; }
+.cand__url--mock {
+  color: #94a3b8; background: #f1f5f9; border-color: #e2e8f0;
+  cursor: not-allowed;
 }
 
 /* 5 階段購買旅程顏色：認知 → 興趣 → 評估 → 品牌 → 決策（漸進加強） */

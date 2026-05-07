@@ -100,6 +100,16 @@ function renderRecentCandidates(payload) {
     return;
   }
 
+  // 偵測是否在 mock 模式（看第一個 doc 的第一個 item 的 url）
+  const firstItem = payload.buckets.flatMap(b => b.docs || []).flatMap(d => d.items || [])[0];
+  const isMockMode = firstItem?.url?.includes("example.com");
+
+  if (isMockMode) {
+    const banner = el("div", "mock-banner");
+    banner.textContent = "⚠️ 目前是 Mock 測試資料 — 標題、互動數、原文連結皆為假資料。要看真實爬取結果需配置爬蟲服務（CRAWLER_BACKEND env）";
+    meta.appendChild(banner);
+  }
+
   meta.appendChild(el("span", null,
     `顯示最近 ${payload.days} 天的候選（每天保留，超過 ${payload.days} 天會自動清除）`
   ));
@@ -168,6 +178,27 @@ function _renderCandidateCard(item, doc, idx) {
     card.appendChild(el("span", `cand__role cand__role--${item.funnel_role}`, roleLabel));
   }
 
+  // 動作列：原文連結 + 用此篇生成
+  const actionRow = el("div", "cand__actions");
+
+  // 原文連結（mock 時顯示為 disabled，真資料才能點）
+  if (item.url) {
+    const isMock = item.url.includes("example.com");
+    if (isMock) {
+      const a = el("span", "cand__url cand__url--mock", "🔒 原文連結（mock）");
+      a.title = item.url;
+      actionRow.appendChild(a);
+    } else {
+      const a = document.createElement("a");
+      a.className = "cand__url";
+      a.href = item.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "🔗 看原文";
+      actionRow.appendChild(a);
+    }
+  }
+
   // 「用此篇生成腳本」按鈕
   const btn = el("button", "btn btn--secondary cand__pick", "用此篇生成腳本");
   btn.type = "button";
@@ -180,8 +211,9 @@ function _renderCandidateCard(item, doc, idx) {
       date: doc.date,
     });
   });
-  card.appendChild(btn);
+  actionRow.appendChild(btn);
 
+  card.appendChild(actionRow);
   return card;
 }
 
