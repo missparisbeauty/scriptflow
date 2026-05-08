@@ -54,3 +54,7 @@ gha-creds-*.json
 # --- 開發過程截圖 / 暫存產出 ---
 output.png
 *.tmp
+
+# 收工交接檔（含敏感狀態）
+HANDOFF.md
+HANDOFF*.md
