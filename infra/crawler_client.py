@@ -189,14 +189,17 @@ def _real_fetch_hot_content(
 
 
 def _call_apify_actor(actor_id: str, actor_input: dict) -> list[dict]:
-    """同步呼叫 Apify Actor，等執行完拿 dataset items。"""
+    """同步呼叫 Apify Actor，等執行完拿 dataset items。
+
+    Token 走 Authorization header（rule-cloud：避免 secret 進 URL/log）。
+    """
     url = (
         f"{APIFY_BASE_URL}/acts/{actor_id.replace('/', '~')}"
         f"/run-sync-get-dataset-items"
     )
-    params = {"token": settings.APIFY_TOKEN}
+    headers = {"Authorization": f"Bearer {settings.APIFY_TOKEN}"}
     with httpx.Client(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
-        resp = client.post(url, params=params, json=actor_input)
+        resp = client.post(url, headers=headers, json=actor_input)
         resp.raise_for_status()
         data = resp.json()
     return data if isinstance(data, list) else []
