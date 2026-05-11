@@ -139,12 +139,16 @@ def _real_fetch_hot_content(
 ) -> list[dict]:
     """呼叫 Apify Actor 抓真實熱門內容。
 
-    沒設定該平台 actor 時，單獨 fallback 到 mock（不影響其他平台）。
+    失敗策略（2026-05 更新）：
+      - 該平台 actor 沒設定 → fallback 到 mock（測試環境友善）
+      - Apify 呼叫失敗（403、5xx、network） → 回空 list，不再用 mock 假裝
+      - 過濾完無中文結果 → 回空 list，不再用 mock 假裝
+    這樣 Firestore 不會被假資料污染。
     """
     actor_id = _platform_actor_id(platform)
     if not actor_id:
         logger.warning(
-            "crawler.no_actor platform=%s — fallback to mock for this platform",
+            "crawler.no_actor platform=%s — fallback to mock (no actor configured)",
             platform,
         )
         return _mock_fetch_hot_content(platform, category, hours, limit)
@@ -156,13 +160,12 @@ def _real_fetch_hot_content(
         items = _call_apify_actor(actor_id, actor_input)
     except Exception as e:
         logger.error(
-            "crawler.apify_call_failed platform=%s actor=%s err=%s",
+            "crawler.apify_call_failed platform=%s actor=%s err=%s — returning empty",
             platform,
             actor_id,
             type(e).__name__,
         )
-        # 整體 actor 呼叫失敗也 fallback 到 mock，不擋住爬蟲流程
-        return _mock_fetch_hot_content(platform, category, hours, limit)
+        return []  # 不用 mock 污染資料
 
     # 1. 映射欄位 → 2. 語言過濾（只留中文圈）→ 3. 取前 limit 筆
     raw_mapped = [_map_actor_item(platform, raw) for raw in items]
@@ -178,13 +181,12 @@ def _real_fetch_hot_content(
         len(chinese_only),
         len(final),
     )
-    # 過濾後若為空（例如該關鍵字幾乎沒中文內容）→ fallback 到 mock 確保前端有東西看
     if not final:
         logger.warning(
-            "crawler.no_chinese_results platform=%s — fallback to mock",
+            "crawler.no_chinese_results platform=%s — returning empty",
             platform,
         )
-        return _mock_fetch_hot_content(platform, category, hours, limit)
+        return []  # 不用 mock 污染資料
     return final
 
 

@@ -72,10 +72,26 @@ def run_daily_crawl(
     for i, item in enumerate(top, start=1):
         item["rank"] = i
 
-    # 4. 主題與集中度
+    # 4. 全平台都沒結果 → 不存空 doc 污染日曆（2026-05 改）
+    if not top:
+        logger.warning(
+            "crawler.no_items_skipped category=%s failed_platforms=%s",
+            category,
+            failed,
+        )
+        return {
+            "candidate_id": None,
+            "date": today,
+            "category": category,
+            "items": [],
+            "failed_platforms": failed,
+            "skipped": True,
+        }
+
+    # 5. 主題與集中度
     topic, concentration = _summarize_topic(top)
 
-    # 5. 寫入 candidates collection
+    # 6. 寫入 candidates collection
     data = {
         "date": today,
         "category": category,
