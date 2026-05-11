@@ -235,6 +235,19 @@ def list_scripts_by_date(date: str, limit: int | None = None) -> list[dict]:
     )
 
 
+def list_recent_scripts(limit: int = 1) -> list[dict]:
+    """拉最近 N 筆 script（依 created_at desc 排序）。
+
+    主要用途：前端「載入最近腳本」按鈕，挽救 LLM 生成完但前端連線斷掉的場景。
+    """
+    return _query(
+        COL_SCRIPTS,
+        order_by="created_at",
+        descending=True,
+        limit=limit,
+    )
+
+
 def list_scripts_by_category(
     category: str, limit: int | None = None
 ) -> list[dict]:

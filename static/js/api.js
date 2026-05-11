@@ -106,6 +106,9 @@ export const generateScript = ({
   });
 };
 
+// 拉最近一次生成的腳本（救援：LLM 跑完但前端連線斷時用）
+export const getLatestScript = () => _fetch("GET", "/api/v1/script/latest");
+
 // --- Storyboard (LLM 端點，無 timeout) ---
 export const generateStoryboard = ({ script_id, platform }) =>
   _fetch("POST", "/api/v1/storyboard/generate", { body: { script_id, platform }, timeoutMs: LLM_TIMEOUT_MS });

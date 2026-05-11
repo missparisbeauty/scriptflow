@@ -141,6 +141,15 @@ def get_script(script_id: str) -> dict | None:
     return fs.get_script(script_id)
 
 
+def get_latest_script() -> dict | None:
+    """拉最近一次生成的腳本（沒有任何腳本回 None）。
+
+    主要用途：LLM 生成完成但前端連線斷掉時的救援機制。
+    """
+    recent = fs.list_recent_scripts(limit=1)
+    return recent[0] if recent else None
+
+
 # --- 內部 ---
 
 

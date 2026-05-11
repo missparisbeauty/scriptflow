@@ -5,6 +5,7 @@ import {
   generateScript,
   generateStoryboard,
   getCandidates,
+  getLatestScript,
   getRecentCandidates,
   triggerCrawler,
 } from "/static/js/api.js";
@@ -337,6 +338,30 @@ function renderScript(script) {
   }
 }
 
+async function doLoadLatestScript() {
+  const btn = document.getElementById("script-load-latest");
+  if (btn) btn.disabled = true;
+  setStatus("script-status", "loading", "拉最近一次腳本…");
+  try {
+    const data = await getLatestScript();
+    lastScript = data;
+    renderScript(data);
+    const dt = data.date ? `（${data.date}）` : "";
+    setStatus("script-status", "success", `已載入 ${data.script_id}${dt}`);
+    document.getElementById("storyboard-card").hidden = false;
+    toast("已載入最近腳本", "success");
+  } catch (e) {
+    if (e.code === "HTTP_404") {
+      setStatus("script-status", "error", "目前還沒有生成過腳本");
+    } else {
+      handleApiError(e);
+      setStatus("script-status", "error", e.message || "載入失敗");
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function doGenerateScript() {
   let candidateIds, category, selectedItemIndex;
 
@@ -449,6 +474,7 @@ function setup() {
   document.getElementById("candidates-refresh")?.addEventListener("click", loadCandidates);
   document.getElementById("candidates-trigger")?.addEventListener("click", triggerCrawlerAndReload);
   document.getElementById("script-generate")?.addEventListener("click", doGenerateScript);
+  document.getElementById("script-load-latest")?.addEventListener("click", doLoadLatestScript);
   document.querySelectorAll(".storyboard-platform").forEach((btn) => {
     btn.addEventListener("click", () => doGenerateStoryboard(btn.dataset.platform));
   });
