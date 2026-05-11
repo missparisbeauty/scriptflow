@@ -1,6 +1,7 @@
 // ScriptFlow — Tab 1 候選 + Tab 2 腳本/分鏡
 
 import {
+  addManualCandidate,
   generateScript,
   generateStoryboard,
   getCandidates,
@@ -454,6 +455,53 @@ function setup() {
   // 切分類或策略 → 自動重新載入候選
   document.getElementById("candidates-category")?.addEventListener("change", loadCandidates);
   document.getElementById("candidates-strategy")?.addEventListener("change", loadCandidates);
+
+  // 手動補爆款表單
+  const manualBtn = document.getElementById("candidates-manual-btn");
+  const manualPanel = document.getElementById("manual-form-panel");
+  const manualCancel = document.getElementById("manual-cancel");
+  const manualForm = document.getElementById("manual-form");
+  manualBtn?.addEventListener("click", () => {
+    if (manualPanel) manualPanel.hidden = !manualPanel.hidden;
+  });
+  manualCancel?.addEventListener("click", () => {
+    if (manualPanel) manualPanel.hidden = true;
+  });
+  manualForm?.addEventListener("submit", onManualSubmit);
+}
+
+async function onManualSubmit(e) {
+  e.preventDefault();
+  const platform = document.getElementById("manual-platform").value;
+  const category = document.getElementById("manual-category").value;
+  const title = document.getElementById("manual-title").value.trim();
+  const url = document.getElementById("manual-url").value.trim();
+  const engagementRaw = document.getElementById("manual-engagement").value.trim();
+  const engagement = engagementRaw ? Number(engagementRaw) : 0;
+
+  if (!title || !url) {
+    setStatus("manual-status", "error", "標題和網址必填");
+    return;
+  }
+  const submit = e.target.querySelector("button[type=submit]");
+  if (submit) submit.disabled = true;
+  setStatus("manual-status", "loading", "儲存中…");
+  try {
+    await addManualCandidate({ platform, category, title, url, engagement });
+    setStatus("manual-status", "success", "已加入今日候選");
+    toast("已加入今日候選", "success");
+    e.target.reset();
+    // 自動重新載入候選列表
+    await loadCandidates();
+    // 收起表單面板
+    const panel = document.getElementById("manual-form-panel");
+    if (panel) panel.hidden = true;
+  } catch (err) {
+    handleApiError(err);
+    setStatus("manual-status", "error", err.message || "新增失敗");
+  } finally {
+    if (submit) submit.disabled = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {

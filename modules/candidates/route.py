@@ -1,9 +1,11 @@
-"""候選爆款 API route — Phase 5。
+"""候選爆款 API route — Phase 5 + 手動補爆款 5/2026。
 
-GET /api/v1/candidates?category={...}&strategy={balanced|hotness}
+GET  /api/v1/candidates?category={...}&strategy={balanced|hotness}
   需要登入；錯誤碼：CANDIDATES_NOT_READY（409）
-GET /api/v1/candidates/recent?days=5&category={...}
+GET  /api/v1/candidates/recent?days=5&category={...}
   取最近 N 天的候選，依日期由近到遠
+POST /api/v1/candidates/manual
+  手動新增一筆爆款到今日 candidate doc（Apify 額度用完時用）
 """
 
 from __future__ import annotations
@@ -12,8 +14,9 @@ from fastapi import APIRouter, Depends, Query
 
 from domain.responses import ok
 from modules.auth.middleware import require_session
-from modules.candidates.schema import Strategy
+from modules.candidates.schema import ManualCandidateRequest, Strategy
 from modules.candidates.service import (
+    add_manual_candidate,
     get_recent_candidates,
     get_today_candidates,
 )
@@ -41,4 +44,16 @@ def list_recent(
     strategy: Strategy = Query("balanced"),
 ) -> dict:
     data = get_recent_candidates(days=days, category=category, strategy=strategy)
+    return ok(data)
+
+
+@router.post("/manual")
+def manual_add(req: ManualCandidateRequest) -> dict:
+    data = add_manual_candidate(
+        platform=req.platform,
+        category=req.category,
+        title=req.title,
+        url=str(req.url),
+        engagement=req.engagement,
+    )
     return ok(data)

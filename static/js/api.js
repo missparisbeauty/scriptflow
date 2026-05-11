@@ -80,6 +80,11 @@ export const getRecentCandidates = ({ days = 5, category, strategy = "balanced" 
   return _fetch("GET", `/api/v1/candidates/recent?${qs}`);
 };
 
+export const addManualCandidate = ({ platform, category, title, url, engagement = 0 }) =>
+  _fetch("POST", "/api/v1/candidates/manual", {
+    body: { platform, category, title, url, engagement },
+  });
+
 // --- Crawler ---
 export const triggerCrawler = ({ category, strategy = "balanced", hours = 24 }) =>
   _fetch("POST", "/api/v1/crawler/trigger", { body: { category, strategy, hours }, timeoutMs: 60_000 });

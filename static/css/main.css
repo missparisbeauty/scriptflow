@@ -211,6 +211,18 @@ body {
   display: inline-block; padding: 2px 6px; border-radius: 4px;
   font-size: 11px; margin-top: 4px;
 }
+/* 手動補爆款表單面板 */
+.manual-panel {
+  margin: 12px 0; padding: 16px;
+  background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px;
+}
+.manual-panel__title {
+  margin: 0 0 8px; font-size: 15px; color: #1e293b;
+}
+.manual-panel__hint {
+  margin: 0 0 12px; font-size: 12px; color: #64748b; line-height: 1.6;
+}
+
 /* Mock 模式警告 banner */
 .mock-banner {
   display: block;

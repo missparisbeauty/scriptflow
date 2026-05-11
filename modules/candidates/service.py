@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from domain import categories
+from domain import categories, rules
 from domain.exceptions import CandidatesNotReady, InvalidInput
 from infra import firestore as fs
+
+SUPPORTED_MANUAL_PLATFORMS = ("douyin", "xiaohongshu", "threads")
 
 VALID_STRATEGIES = ("balanced", "hotness")
 MAX_RECENT_DAYS = 30  # 防呆：最多查 30 天
@@ -124,6 +126,93 @@ def _resort_items(items: list[dict], *, strategy: str) -> list[dict]:
     for i, it in enumerate(sorted_items, start=1):
         it["rank"] = i
     return sorted_items
+
+
+def add_manual_candidate(
+    *,
+    platform: str,
+    category: str,
+    title: str,
+    url: str,
+    engagement: int = 0,
+) -> dict:
+    """手動新增一筆爆款到今日 candidate doc。
+
+    使用情境：Apify 額度用完 / 找到爆款想直接加入候選池。
+    若今日 doc 不存在 → 建立；存在 → append 到 items[]，標記 is_manual=True。
+
+    Args:
+        platform: 必須在 SUPPORTED_MANUAL_PLATFORMS 內
+        category: 必須是合法分類
+        title: 1-200 字
+        url: http(s) URL（前端用 HttpUrl 已驗）
+        engagement: 互動數，預設 0
+
+    Returns:
+        更新後的 candidate doc
+    """
+    if platform not in SUPPORTED_MANUAL_PLATFORMS:
+        raise InvalidInput(
+            f"platform must be one of {SUPPORTED_MANUAL_PLATFORMS}, got {platform!r}"
+        )
+    if not categories.is_valid_category(category):
+        raise InvalidInput(f"invalid category: {category}")
+    title = (title or "").strip()
+    if not title:
+        raise InvalidInput("title cannot be empty")
+
+    today = _today_iso()
+    doc_id = _make_candidate_id(today, category)
+    doc = fs.get_candidate(doc_id)
+
+    # 新 item — 用 domain.rules 計算 topic_match / intent / 角色（與 crawler 一致）
+    topic_match = round(rules.compute_similarity(title, category), 3)
+    intent = round(rules.compute_purchase_intent_density(title), 3)
+    new_item = {
+        "platform": platform,
+        "url": url,
+        "title": title[:200],
+        "engagement": int(engagement),
+        "completion_rate": None,
+        "topic_match": topic_match,
+        "purchase_intent_density": intent,
+        "funnel_role": _classify_role_inline(topic_match, intent),
+        "b_track_similarity": None,
+        "is_manual": True,
+    }
+
+    if doc is None:
+        # 今日還沒爬過，建立一個新 doc 只含這筆 manual 條目
+        doc = {
+            "date": today,
+            "category": category,
+            "topic": title[:30],
+            "topic_concentration": 0.0,
+            "failed_platforms": [],
+            "items": [new_item],
+        }
+    else:
+        items = list(doc.get("items") or [])
+        items.append(new_item)
+        doc["items"] = items
+
+    fs.save_candidate(doc_id, doc)
+    return doc
+
+
+def _classify_role_inline(topic: float, intent: float) -> str:
+    """與 modules/crawler/service._classify_role 邏輯一致，
+    這裡 inline 避免跨模組 import（rule-module-isolation）。
+    判斷邏輯之後若要共用可移到 domain/rules.py。"""
+    if intent >= rules.PURCHASE_INTENT_DECISION_THRESHOLD:
+        return "decision"
+    if topic >= rules.TOPIC_MATCH_EVALUATION_THRESHOLD:
+        if intent >= rules.PURCHASE_INTENT_BRAND_THRESHOLD:
+            return "brand_value"
+        return "evaluation"
+    if topic >= rules.TOPIC_MATCH_INTEREST_THRESHOLD:
+        return "interest"
+    return "awareness"
 
 
 # --- 跨模組公開（ScriptService 用） ---

@@ -47,12 +47,13 @@ def run_daily_crawl(
     candidate_id = f"{today.replace('-', '')}_{category}"
 
     # 1. 三平台爬取（單一失敗不中斷）
+    # limit=10：每平台只抓 10 筆，控制 Apify 月用量（從 30 降到 10）
     raw_items: list[dict] = []
     failed: list[str] = []
     for platform in crawler_client.list_supported_platforms():
         try:
             items = crawler_client.fetch_hot_content(
-                platform, category, hours=hours
+                platform, category, hours=hours, limit=10
             )
             raw_items.extend(items)
         except Exception as e:

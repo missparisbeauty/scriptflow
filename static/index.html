@@ -62,9 +62,42 @@
                 <option value="hotness">熱門優先</option>
               </select>
               <button id="candidates-refresh" class="btn btn--secondary">重新載入</button>
+              <button id="candidates-manual-btn" class="btn btn--secondary">＋ 手動補爆款</button>
               <button id="candidates-trigger" class="btn btn--primary">觸發爬取</button>
             </div>
           </div>
+
+          <!-- 手動補爆款表單（預設隱藏，點 ＋ 手動補爆款 才開） -->
+          <div id="manual-form-panel" class="manual-panel" hidden>
+            <h3 class="manual-panel__title">手動新增爆款</h3>
+            <p class="manual-panel__hint">
+              你看到爆款貼文時，把它的網址 + 標題貼進來，會加入今日候選池。<br>
+              使用情境：Apify 額度用完、平台不支援爬蟲、或想推薦特定爆款給 AI 生成腳本。
+            </p>
+            <form id="manual-form" class="form-stack">
+              <div class="form-row">
+                <select id="manual-platform" class="control" required>
+                  <option value="douyin">抖音 / TikTok</option>
+                  <option value="xiaohongshu">小紅書</option>
+                  <option value="threads">Threads</option>
+                </select>
+                <select id="manual-category" class="control" required>
+                  <option value="髮品">髮品</option>
+                  <option value="美妝">美妝</option>
+                  <option value="美食">美食</option>
+                </select>
+              </div>
+              <input id="manual-title" class="control" type="text" placeholder="貼文標題（200 字內）" required maxlength="200">
+              <input id="manual-url" class="control" type="url" placeholder="貼文網址 https://..." required>
+              <input id="manual-engagement" class="control" type="number" placeholder="互動數（觀看 / 按讚數，選填）" min="0">
+              <div class="form-row">
+                <button class="btn btn--primary" type="submit">儲存到今日候選</button>
+                <button id="manual-cancel" class="btn btn--secondary" type="button">取消</button>
+              </div>
+            </form>
+            <div id="manual-status" class="status"></div>
+          </div>
+
           <div id="candidates-status" class="status"></div>
           <div id="candidates-meta" class="meta"></div>
           <div id="candidates-list" class="cards"></div>

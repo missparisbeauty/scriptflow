@@ -210,9 +210,9 @@ def _build_actor_input(
 ) -> dict[str, Any]:
     """組 actor input。各 actor schema 不一樣，這裡集中映射。
 
-    多取 3 倍量，因為後處理會過濾掉非中文內容。
+    多取 2 倍量作為中文過濾緩衝（從 3x 降到 2x，省 Apify 額度）。
     """
-    over_fetch = max(limit * 3, 30)
+    over_fetch = max(limit * 2, 12)
     if platform == "douyin":
         # clockworks/free-tiktok-scraper：proxyCountryCode 走台灣 IP，
         # 增加抓到中文圈內容的機率
