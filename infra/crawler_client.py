@@ -1,16 +1,18 @@
-"""三平台爬取輔助 client 封裝 — Phase 3 + Apify 整合。
+"""三平台爬取輔助 client 封裝 — Phase 3 + Apify + TikWM 整合。
 
 責任：
   - fetch_hot_content(platform, category, hours, limit) → list[dict]
   - 三平台：xiaohongshu / douyin / threads
   - 介面對齊 candidates collection 的 items[*] 欄位（spec-developer）
   - 後端模式（CRAWLER_BACKEND env）：
-      mock   → 回確定性測試資料（無 token 時自動降級）
+      mock   → 回確定性測試資料
+      tikwm  → 呼叫 tikwm.com 公開 API（免費，抖音/TikTok）
       apify  → 呼叫 Apify Actor API（需設 SF_APIFY_TOKEN）
+      未設定  → 有 APIFY_TOKEN 走 apify，否則走 tikwm
 
 設計：
+  - tikwm 只支援 douyin；xiaohongshu / threads 無 tikwm actor，各自 fallback mock
   - Apify Actor IDs 透過 env 可覆寫，預設用 clockworks/free-tiktok-scraper
-  - 沒設定 actor ID 的平台單獨 fallback 到 mock（不整批掉）
   - rule-ai-llm：API token 只在 infra 層讀取
 """
 
@@ -30,23 +32,22 @@ logger = logging.getLogger(__name__)
 # --- 設定 ---
 
 SUPPORTED_PLATFORMS = ("xiaohongshu", "douyin", "threads")
-DEFAULT_TIMEOUT_SECONDS = 90  # Apify run-sync 較慢
+APIFY_TIMEOUT_SECONDS = 90   # Apify run-sync 較慢
+TIKWM_TIMEOUT_SECONDS = 30   # TikWM 直接 API，較快
 MAX_HOURS = 168
 MAX_LIMIT = 50
 
 APIFY_BASE_URL = "https://api.apify.com/v2"
+TIKWM_BASE_URL = "https://tikwm.com/api"
 
 # 各平台對應的 Apify Actor ID（env 可覆寫）
-# clockworks/free-tiktok-scraper 是免費熱門 actor，抖音/TikTok 通用
 APIFY_ACTOR_DOUYIN = os.getenv(
     "APIFY_ACTOR_DOUYIN", "clockworks/free-tiktok-scraper"
 )
-# 小紅書與 Threads 預設不啟用（user 需自行從 Apify Store 選 actor 並設 env）
 APIFY_ACTOR_XIAOHONGSHU = os.getenv("APIFY_ACTOR_XIAOHONGSHU", "")
 APIFY_ACTOR_THREADS = os.getenv("APIFY_ACTOR_THREADS", "")
 
-
-# 各分類對應的搜尋關鍵字（給 Apify 搜尋用）
+# 各分類對應的搜尋關鍵字
 _CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "髮品": ["髮膜", "護髮", "染髮"],
     "美妝": ["彩妝", "保養", "化妝品"],
@@ -54,24 +55,13 @@ _CATEGORY_KEYWORDS: dict[str, list[str]] = {
 }
 
 # --- 語言過濾（只留中文圈內容） ---
-# CJK 漢字（中日韓共用，但日韓會搭配各自的特殊字元）
 _CJK_RE = re.compile(r"[一-鿿]")
-# 日文平假名 + 片假名（出現即判定為日文，排除）
 _JAPANESE_KANA_RE = re.compile(r"[぀-ゟ゠-ヿ]")
-# 韓文諺文（出現即判定為韓文，排除）
 _KOREAN_RE = re.compile(r"[가-힯]")
-# 純英文判斷：去掉空白/標點/數字後，剩下的全是 ASCII
 _NON_LETTER_RE = re.compile(r"[\s\W\d#@_]+")
 
 
 def _is_chinese_content(text: str) -> bool:
-    """判斷文字是否為中文（繁體/簡體）。
-
-    規則：
-      ✓ 必須包含 CJK 漢字
-      ✗ 不能含日文假名（あ-ん、ア-ン）
-      ✗ 不能含韓文諺文（가-힣）
-    """
     if not text:
         return False
     if _JAPANESE_KANA_RE.search(text):
@@ -81,19 +71,26 @@ def _is_chinese_content(text: str) -> bool:
     return bool(_CJK_RE.search(text))
 
 
-# --- 對外 API ---
+# --- 後端路由 ---
+
+def _resolve_backend() -> str:
+    """決定本次爬取使用哪個後端。
+
+    優先順序：
+      1. CRAWLER_BACKEND env 明確指定 → 照用
+      2. 未指定 + 有 APIFY_TOKEN → apify
+      3. 未指定 + 無 APIFY_TOKEN → tikwm（免費，不降 mock）
+    """
+    backend = os.getenv("CRAWLER_BACKEND", "").lower()
+    if backend in ("mock", "apify", "tikwm"):
+        return backend
+    # auto 模式
+    return "apify" if settings.APIFY_TOKEN else "tikwm"
 
 
 def is_mock() -> bool:
-    """是否走 mock 模式。
-
-    優先順序：
-      1. CRAWLER_BACKEND=mock 顯式 mock
-      2. 沒 APIFY_TOKEN → 自動 mock
-    """
-    if os.getenv("CRAWLER_BACKEND", "").lower() == "mock":
-        return True
-    return not settings.APIFY_TOKEN
+    """是否走 mock 模式（供前端 warning banner 判斷）。"""
+    return _resolve_backend() == "mock"
 
 
 def list_supported_platforms() -> list[str]:
@@ -118,37 +115,145 @@ def fetch_hot_content(
     if not 0 < limit <= MAX_LIMIT:
         raise ValueError(f"limit must be in (0, {MAX_LIMIT}], got {limit}")
 
-    if is_mock():
+    backend = _resolve_backend()
+    logger.info("crawler.backend=%s platform=%s category=%s", backend, platform, category)
+
+    if backend == "mock":
         return _mock_fetch_hot_content(platform, category, hours, limit)
-    return _real_fetch_hot_content(platform, category, hours, limit)
+    if backend == "tikwm":
+        return _tikwm_fetch_hot_content(platform, category, hours, limit)
+    # apify
+    if not settings.APIFY_TOKEN:
+        logger.warning(
+            "crawler.apify_no_token — fallback to tikwm"
+        )
+        return _tikwm_fetch_hot_content(platform, category, hours, limit)
+    return _apify_fetch_hot_content(platform, category, hours, limit)
 
 
-# --- Apify 真實實作 ---
+# =========================================================
+# TikWM 實作（免費，douyin 專用）
+# =========================================================
+
+def _tikwm_fetch_hot_content(
+    platform: str, category: str, hours: int, limit: int
+) -> list[dict]:
+    """呼叫 tikwm.com 公開 API 抓 TikTok/抖音 熱門內容。
+
+    tikwm 只支援 TikTok/douyin；其他平台 fallback mock（跟之前行為一致）。
+    """
+    if platform != "douyin":
+        logger.warning(
+            "crawler.tikwm_no_actor platform=%s — fallback to mock (tikwm douyin only)",
+            platform,
+        )
+        return _mock_fetch_hot_content(platform, category, hours, limit)
+
+    keywords = _CATEGORY_KEYWORDS.get(category, [category])
+    keyword = keywords[0]  # tikwm feed/search 一次一個關鍵字
+
+    try:
+        items = _call_tikwm_api(keyword, limit=max(limit * 2, 12))
+    except Exception as e:
+        logger.error(
+            "crawler.tikwm_call_failed platform=%s keyword=%s err=%s — returning empty",
+            platform,
+            keyword,
+            type(e).__name__,
+        )
+        return []
+
+    raw_mapped = [_map_tikwm_item(raw) for raw in items]
+    chinese_only = [
+        m for m in raw_mapped if m is not None and _is_chinese_content(m["title"])
+    ]
+    final = chinese_only[:limit]
+    logger.info(
+        "crawler.tikwm_ok platform=%s keyword=%s raw=%d chinese=%d kept=%d",
+        platform, keyword, len(items), len(chinese_only), len(final),
+    )
+    if not final:
+        logger.warning("crawler.tikwm_no_chinese platform=%s — returning empty", platform)
+        return []
+    return final
 
 
-def _platform_actor_id(platform: str) -> str:
+def _call_tikwm_api(keyword: str, *, limit: int) -> list[dict]:
+    """呼叫 tikwm.com /api/feed/search。
+
+    無需 API key，公開端點。
+    回傳 data.videos list，失敗 raise Exception。
+    """
+    url = f"{TIKWM_BASE_URL}/feed/search"
+    params = {"keywords": keyword, "count": limit}
+    with httpx.Client(timeout=TIKWM_TIMEOUT_SECONDS) as client:
+        resp = client.get(url, params=params)
+        resp.raise_for_status()
+        body = resp.json()
+
+    # TikWM 成功時 code=0
+    if body.get("code") != 0:
+        raise RuntimeError(f"tikwm error code={body.get('code')} msg={body.get('msg')}")
+
+    data = body.get("data") or {}
+    return data.get("videos") or []
+
+
+def _map_tikwm_item(raw: dict) -> dict | None:
+    """把 tikwm API item 對齊 candidates.items[*] schema。"""
+    if not isinstance(raw, dict):
+        return None
+
+    title = (raw.get("title") or raw.get("desc") or "").strip()[:120]
+    if not title:
+        return None
+
+    video_id = raw.get("id") or raw.get("video_id") or ""
+    author = raw.get("author") or {}
+    username = author.get("unique_id") or author.get("uniqueId") or ""
+    url = (
+        f"https://www.tiktok.com/@{username}/video/{video_id}"
+        if username and video_id
+        else raw.get("play_url") or ""
+    )
+
+    play      = _to_int(raw.get("play") or raw.get("play_count"))
+    likes     = _to_int(raw.get("digg_count") or raw.get("likes"))
+    comments  = _to_int(raw.get("comment_count") or raw.get("comments"))
+    shares    = _to_int(raw.get("share_count") or raw.get("shares"))
+    engagement = play or (likes + comments * 5 + shares * 3) or likes or 0
+
     return {
-        "douyin": APIFY_ACTOR_DOUYIN,
-        "xiaohongshu": APIFY_ACTOR_XIAOHONGSHU,
-        "threads": APIFY_ACTOR_THREADS,
-    }.get(platform, "")
+        "platform": "douyin",
+        "url": url,
+        "title": title,
+        "engagement": int(engagement),
+        "completion_rate": None,
+        "topic_match": 0.0,
+        "purchase_intent_density": 0.0,
+        "funnel_role": None,
+        "b_track_similarity": None,
+    }
 
 
-def _real_fetch_hot_content(
+# =========================================================
+# Apify 實作
+# =========================================================
+
+def _apify_fetch_hot_content(
     platform: str, category: str, hours: int, limit: int
 ) -> list[dict]:
     """呼叫 Apify Actor 抓真實熱門內容。
 
-    失敗策略（2026-05 更新）：
-      - 該平台 actor 沒設定 → fallback 到 mock（測試環境友善）
-      - Apify 呼叫失敗（403、5xx、network） → 回空 list，不再用 mock 假裝
-      - 過濾完無中文結果 → 回空 list，不再用 mock 假裝
-    這樣 Firestore 不會被假資料污染。
+    失敗策略：
+      - 該平台 actor 沒設定 → fallback mock
+      - Apify 呼叫失敗（403、5xx、network） → 回空 list
+      - 過濾完無中文結果 → 回空 list
     """
     actor_id = _platform_actor_id(platform)
     if not actor_id:
         logger.warning(
-            "crawler.no_actor platform=%s — fallback to mock (no actor configured)",
+            "crawler.apify_no_actor platform=%s — fallback to mock",
             platform,
         )
         return _mock_fetch_hot_content(platform, category, hours, limit)
@@ -161,13 +266,10 @@ def _real_fetch_hot_content(
     except Exception as e:
         logger.error(
             "crawler.apify_call_failed platform=%s actor=%s err=%s — returning empty",
-            platform,
-            actor_id,
-            type(e).__name__,
+            platform, actor_id, type(e).__name__,
         )
-        return []  # 不用 mock 污染資料
+        return []
 
-    # 1. 映射欄位 → 2. 語言過濾（只留中文圈）→ 3. 取前 limit 筆
     raw_mapped = [_map_actor_item(platform, raw) for raw in items]
     chinese_only = [
         m for m in raw_mapped if m is not None and _is_chinese_content(m["title"])
@@ -175,32 +277,30 @@ def _real_fetch_hot_content(
     final = chinese_only[:limit]
     logger.info(
         "crawler.apify_ok platform=%s actor=%s raw=%d chinese=%d kept=%d",
-        platform,
-        actor_id,
-        len(items),
-        len(chinese_only),
-        len(final),
+        platform, actor_id, len(items), len(chinese_only), len(final),
     )
     if not final:
-        logger.warning(
-            "crawler.no_chinese_results platform=%s — returning empty",
-            platform,
-        )
-        return []  # 不用 mock 污染資料
+        logger.warning("crawler.apify_no_chinese platform=%s — returning empty", platform)
+        return []
     return final
 
 
-def _call_apify_actor(actor_id: str, actor_input: dict) -> list[dict]:
-    """同步呼叫 Apify Actor，等執行完拿 dataset items。
+def _platform_actor_id(platform: str) -> str:
+    return {
+        "douyin": APIFY_ACTOR_DOUYIN,
+        "xiaohongshu": APIFY_ACTOR_XIAOHONGSHU,
+        "threads": APIFY_ACTOR_THREADS,
+    }.get(platform, "")
 
-    Token 走 Authorization header（rule-cloud：避免 secret 進 URL/log）。
-    """
+
+def _call_apify_actor(actor_id: str, actor_input: dict) -> list[dict]:
+    """同步呼叫 Apify Actor，Token 走 Authorization header。"""
     url = (
         f"{APIFY_BASE_URL}/acts/{actor_id.replace('/', '~')}"
         f"/run-sync-get-dataset-items"
     )
     headers = {"Authorization": f"Bearer {settings.APIFY_TOKEN}"}
-    with httpx.Client(timeout=DEFAULT_TIMEOUT_SECONDS) as client:
+    with httpx.Client(timeout=APIFY_TIMEOUT_SECONDS) as client:
         resp = client.post(url, headers=headers, json=actor_input)
         resp.raise_for_status()
         data = resp.json()
@@ -210,14 +310,8 @@ def _call_apify_actor(actor_id: str, actor_input: dict) -> list[dict]:
 def _build_actor_input(
     platform: str, *, keywords: list[str], limit: int
 ) -> dict[str, Any]:
-    """組 actor input。各 actor schema 不一樣，這裡集中映射。
-
-    多取 2 倍量作為中文過濾緩衝（從 3x 降到 2x，省 Apify 額度）。
-    """
     over_fetch = max(limit * 2, 12)
     if platform == "douyin":
-        # clockworks/free-tiktok-scraper：proxyCountryCode 走台灣 IP，
-        # 增加抓到中文圈內容的機率
         return {
             "hashtags": keywords,
             "resultsPerPage": over_fetch,
@@ -227,57 +321,36 @@ def _build_actor_input(
             "shouldDownloadSubtitles": False,
         }
     if platform == "xiaohongshu":
-        return {
-            "keyword": keywords[0],
-            "keywords": keywords,
-            "maxItems": over_fetch,
-        }
+        return {"keyword": keywords[0], "keywords": keywords, "maxItems": over_fetch}
     if platform == "threads":
-        return {
-            "search_keyword": keywords[0],
-            "max_posts": over_fetch,
-        }
+        return {"search_keyword": keywords[0], "max_posts": over_fetch}
     return {"keywords": keywords, "limit": over_fetch}
 
 
 def _map_actor_item(platform: str, raw: dict) -> dict | None:
-    """把 Apify actor 回傳的 raw item 對齊 candidates.items[*] schema。
-
-    各 actor 欄位不一致，這裡盡力歸一化；找不到必要欄位回 None。
-    """
+    """把 Apify actor raw item 對齊 candidates.items[*] schema。"""
     if not isinstance(raw, dict):
         return None
 
-    # 標題
     title = (
-        raw.get("text")
-        or raw.get("title")
-        or raw.get("desc")
-        or raw.get("description")
-        or ""
+        raw.get("text") or raw.get("title") or raw.get("desc")
+        or raw.get("description") or ""
     )
-    title = (title or "").strip()
+    title = (title or "").strip()[:120]
     if not title:
         return None
-    title = title[:120]  # 控制長度
 
-    # URL
     url = (
-        raw.get("webVideoUrl")
-        or raw.get("url")
-        or raw.get("postUrl")
-        or raw.get("link")
-        or ""
+        raw.get("webVideoUrl") or raw.get("url") or raw.get("postUrl")
+        or raw.get("link") or ""
     )
 
-    # 互動數（依 actor 不同，名稱混搭）
-    plays = _to_int(raw.get("playCount") or raw.get("viewCount") or raw.get("views"))
-    likes = _to_int(raw.get("diggCount") or raw.get("likes") or raw.get("likeCount"))
+    plays    = _to_int(raw.get("playCount") or raw.get("viewCount") or raw.get("views"))
+    likes    = _to_int(raw.get("diggCount") or raw.get("likes") or raw.get("likeCount"))
     comments = _to_int(raw.get("commentCount") or raw.get("comments"))
-    shares = _to_int(raw.get("shareCount") or raw.get("shares"))
+    shares   = _to_int(raw.get("shareCount") or raw.get("shares"))
     engagement = plays or (likes + comments * 5 + shares * 3) or likes or 0
 
-    # 完看率（TikTok 沒有，部分 actor 有）
     completion_rate = raw.get("completionRate")
     if completion_rate is not None:
         try:
@@ -291,7 +364,6 @@ def _map_actor_item(platform: str, raw: dict) -> dict | None:
         "title": title,
         "engagement": int(engagement),
         "completion_rate": completion_rate,
-        # 由 CrawlerService 用 domain.rules 計算後填入
         "topic_match": 0.0,
         "purchase_intent_density": 0.0,
         "funnel_role": None,
@@ -306,8 +378,9 @@ def _to_int(v: Any) -> int:
         return 0
 
 
-# --- Mock 實作（保留作 fallback） ---
-
+# =========================================================
+# Mock 實作（本機開發 / 備用）
+# =========================================================
 
 def _candidate_item(
     *,
@@ -317,7 +390,6 @@ def _candidate_item(
     engagement: int,
     completion_rate: float | None = None,
 ) -> dict[str, Any]:
-    """產生符合 candidates.items[*] schema 的單筆。"""
     return {
         "platform": platform,
         "url": f"https://example.com/{platform}/mock-{index:03d}",
