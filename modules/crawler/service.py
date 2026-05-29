@@ -13,11 +13,19 @@ owner collection：candidates
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from domain import categories, rules
 from domain.exceptions import InvalidInput
 from infra import crawler_client, firestore as fs
+
+
+def _extract_note_id(url: str) -> str | None:
+    """Extract hex note ID from a xiaohongshu.com explore URL."""
+    m = re.search(r"/explore/([0-9a-f]{16,32})", url or "")
+    return m.group(1) if m else None
 
 logger = logging.getLogger(__name__)
 
@@ -64,15 +72,44 @@ def run_daily_crawl(
             )
             failed.append(platform)
 
-    # 2. 對每筆計算 domain 指標
+    # 2. 非 mock 模式時，過濾掉各平台 fallback 的 mock 假資料
+    #    （mock fixture 的互動數是假的高數字，若不過濾會壓過真實爬取結果）
+    if not crawler_client.is_mock():
+        real_items = [
+            it for it in raw_items
+            if "example.com" not in it.get("url", "")
+        ]
+        if real_items:  # 至少有一個真實平台有資料才替換，避免全空
+            raw_items = real_items
+
+    # 3. 對每筆計算 domain 指標
     enriched = [_enrich(item, category) for item in raw_items]
+    enriched = _ensure_xhs_fallback(enriched, category)
 
     # 3. 排序並截 top N
     top = _select_top(enriched, strategy=strategy, n=DEFAULT_TOP_N)
+    top = _force_xhs_slot(top, enriched, category, n=DEFAULT_TOP_N)
     for i, item in enumerate(top, start=1):
         item["rank"] = i
 
-    # 4. 全平台都沒結果 → 不存空 doc 污染日曆（2026-05 改）
+    # 4. 把 XHS 項目的 preview 存進獨立快取 collection，同時保留在 item。
+    #    前端可直接用 item.preview 顯示，cache 則供舊頁面/重整後 API 讀取。
+    for item in top:
+        if item.get("platform") == "xiaohongshu":
+            preview = item.get("preview")
+            if preview:
+                note_id = _extract_note_id(item.get("source_url", ""))
+                if note_id:
+                    try:
+                        fs.save_xhs_preview_cache(note_id, preview)
+                        logger.info("crawler.xhs_preview_cached note_id=%s", note_id)
+                    except Exception as e:
+                        logger.warning(
+                            "crawler.xhs_preview_cache_failed note_id=%s err=%s",
+                            note_id, type(e).__name__,
+                        )
+
+    # 6. 全平台都沒結果 → 不存空 doc 污染日曆（2026-05 改）
     if not top:
         logger.warning(
             "crawler.no_items_skipped category=%s failed_platforms=%s",
@@ -88,10 +125,10 @@ def run_daily_crawl(
             "skipped": True,
         }
 
-    # 5. 主題與集中度
+    # 7. 主題與集中度
     topic, concentration = _summarize_topic(top)
 
-    # 6. 寫入 candidates collection
+    # 8. 寫入 candidates collection
     data = {
         "date": today,
         "category": category,
@@ -126,6 +163,62 @@ def _enrich(item: dict, category: str) -> dict:
     )
     item["funnel_role"] = _classify_role(item)
     return item
+
+
+def _ensure_xhs_fallback(items: list[dict], category: str) -> list[dict]:
+    """Force one XHS slot even when the XHS actor returns no usable rows."""
+    if any(item.get("platform") == "xiaohongshu" for item in items):
+        return items
+
+    try:
+        fallback_items = crawler_client._mock_fetch_hot_content(
+            "xiaohongshu", category, hours=24, limit=1
+        )
+    except Exception as e:
+        logger.warning(
+            "crawler.xhs_forced_fallback_failed category=%s err=%s",
+            category, type(e).__name__,
+        )
+        return items
+
+    if not fallback_items:
+        return items
+
+    fallback = dict(fallback_items[0])
+    keyword = f"{category} {fallback.get('title', '')}".strip()
+    search_url = f"https://www.xiaohongshu.com/search_result?keyword={quote(keyword)}"
+    fallback["url"] = search_url
+    fallback["source_url"] = search_url
+    fallback["search_keyword"] = keyword
+    fallback["is_fallback"] = True
+    fallback["fallback_reason"] = "xiaohongshu_actor_empty"
+    fallback["engagement"] = 0
+    logger.warning("crawler.xhs_forced_fallback category=%s", category)
+    return [*items, _enrich(fallback, category)]
+
+
+def _force_xhs_slot(
+    top: list[dict],
+    enriched: list[dict],
+    category: str,
+    *,
+    n: int,
+) -> list[dict]:
+    """Final guard: top candidates must contain one XHS item."""
+    if any(item.get("platform") == "xiaohongshu" for item in top):
+        return top
+
+    with_xhs = _ensure_xhs_fallback(enriched, category)
+    xhs_item = next(
+        (item for item in with_xhs if item.get("platform") == "xiaohongshu"),
+        None,
+    )
+    if xhs_item is None:
+        return top
+
+    if len(top) < n:
+        return [*top, xhs_item]
+    return [*top[: max(n - 1, 0)], xhs_item]
 
 
 def _classify_role(item: dict) -> str:
@@ -165,7 +258,28 @@ def _select_top(items: list[dict], *, strategy: str, n: int) -> list[dict]:
             return float(
                 x.get("engagement", 0) * (0.5 + x.get("topic_match", 0))
             )
-    return sorted(items, key=key, reverse=True)[:n]
+    ranked = sorted(items, key=key, reverse=True)
+    if n <= 1:
+        return ranked[:n]
+
+    selected: list[dict] = []
+
+    # XHS is strategically important for this product. Douyin/TikTok often has
+    # much larger engagement numbers, so preserve one XHS item when available.
+    best_xhs = next(
+        (item for item in ranked if item.get("platform") == "xiaohongshu"),
+        None,
+    )
+    if best_xhs is not None:
+        selected.append(best_xhs)
+
+    for item in ranked:
+        if len(selected) >= n:
+            break
+        if item not in selected:
+            selected.append(item)
+
+    return sorted(selected, key=key, reverse=True)[:n]
 
 
 def _summarize_topic(top: list[dict]) -> tuple[str, float]:

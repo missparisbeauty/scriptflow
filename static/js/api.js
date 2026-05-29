@@ -85,6 +85,12 @@ export const addManualCandidate = ({ platform, category, title, url, engagement 
     body: { platform, category, title, url, engagement },
   });
 
+// 小紅書貼文預覽（Apify proxy；台灣 IP 無法直連，timeout 60s）
+export const getXhsPreview = (url) =>
+  _fetch("GET", `/api/v1/candidates/xhs-preview?url=${encodeURIComponent(url)}`, {
+    timeoutMs: 60_000,
+  });
+
 // --- Crawler ---
 export const triggerCrawler = ({ category, strategy = "balanced", hours = 24 }) =>
   _fetch("POST", "/api/v1/crawler/trigger", { body: { category, strategy, hours }, timeoutMs: 60_000 });

@@ -10,13 +10,25 @@ owner collection：candidates
 
 from __future__ import annotations
 
+import re
+import logging
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from domain import categories, rules
-from domain.exceptions import CandidatesNotReady, InvalidInput
-from infra import firestore as fs
+from domain.exceptions import CandidatesNotReady, InvalidInput, ResourceNotFound
+from infra import crawler_client, firestore as fs
 
-SUPPORTED_MANUAL_PLATFORMS = ("douyin", "xiaohongshu", "threads")
+logger = logging.getLogger(__name__)
+
+# SSRF 防護：只允許小紅書筆記 URL（explore/hex_id 格式）
+_XHS_NOTE_URL_RE = re.compile(
+    r"^https://www\.xiaohongshu\.com/explore/[0-9a-f]{18,24}$"
+)
+_XHS_NOTE_ID_RE = re.compile(r"^[0-9a-f]{18,24}$")
+_XHS_ALLOWED_QUERY_KEYS = {"xsec_token", "xsec_source"}
+
+SUPPORTED_MANUAL_PLATFORMS = ("douyin", "xiaohongshu")
 
 VALID_STRATEGIES = ("balanced", "hotness")
 MAX_RECENT_DAYS = 30  # 防呆：最多查 30 天
@@ -58,12 +70,17 @@ def get_today_candidates(
                 category=category,
             )
         # 過濾一下 strategy（單筆 candidate doc 已經是某 strategy）
+        _ensure_xhs_candidate(doc)
+        _hydrate_xhs_previews(doc)
         return doc
 
     # 沒指定分類 → 回今天所有分類
     docs = fs.list_candidates_by_date(today)
     if not docs:
         raise CandidatesNotReady(f"no candidates for {today}", date=today)
+    for doc in docs:
+        _ensure_xhs_candidate(doc)
+        _hydrate_xhs_previews(doc)
     return {"date": today, "items": docs}
 
 
@@ -105,21 +122,97 @@ def get_recent_candidates(
             docs = fs.list_candidates_by_date(d)
         # 依策略對每個 doc 內的 items 即時重排（不寫回 Firestore）
         for doc in docs:
+            _ensure_xhs_candidate(doc)
+            _hydrate_xhs_previews(doc)
             if isinstance(doc.get("items"), list):
                 doc["items"] = _resort_items(doc["items"], strategy=strategy)
         buckets.append({"date": d, "docs": docs})
     return {"days": days, "strategy": strategy, "buckets": buckets}
 
 
+def _hydrate_xhs_previews(doc: dict) -> None:
+    """Attach cached XHS preview data to candidate items when available."""
+    items = doc.get("items")
+    if not isinstance(items, list):
+        return
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("platform") != "xiaohongshu" or item.get("preview"):
+            continue
+        note_id = _extract_note_id(item.get("source_url") or item.get("url") or "")
+        if not note_id:
+            continue
+        cached = fs.get_xhs_preview_cache(note_id)
+        if _is_usable_xhs_preview(cached):
+            item["preview"] = cached
+
+
+def _ensure_xhs_candidate(doc: dict) -> None:
+    """Add one XHS fallback item to older candidate docs that only contain Douyin."""
+    items = doc.get("items")
+    if not isinstance(items, list):
+        return
+    if any(isinstance(item, dict) and item.get("platform") == "xiaohongshu" for item in items):
+        return
+
+    category = doc.get("category")
+    if not isinstance(category, str) or not category:
+        return
+
+    try:
+        fallback_items = crawler_client._mock_fetch_hot_content(
+            "xiaohongshu", category, hours=24, limit=1
+        )
+    except Exception:
+        return
+    if not fallback_items:
+        return
+
+    fallback = dict(fallback_items[0])
+    keyword = f"{category} {fallback.get('title', '')}".strip()
+    search_url = f"https://www.xiaohongshu.com/search_result?keyword={quote(keyword)}"
+    fallback["url"] = search_url
+    fallback["source_url"] = search_url
+    fallback["search_keyword"] = keyword
+    fallback["engagement"] = 0
+    fallback["is_fallback"] = True
+    fallback["fallback_reason"] = "xiaohongshu_actor_empty"
+    fallback["topic_match"] = round(rules.compute_similarity(fallback.get("title", ""), category), 3)
+    fallback["purchase_intent_density"] = round(
+        rules.compute_purchase_intent_density(fallback.get("title", "")), 3
+    )
+    fallback["funnel_role"] = _classify_role_inline(
+        fallback["topic_match"], fallback["purchase_intent_density"]
+    )
+    display_limit = 3
+    if len(items) >= display_limit:
+        items[display_limit - 1] = fallback
+        del items[display_limit:]
+    else:
+        items.append(fallback)
+
+    for idx, item in enumerate(items, start=1):
+        if isinstance(item, dict):
+            item["rank"] = idx
+
+
 def _resort_items(items: list[dict], *, strategy: str) -> list[dict]:
     """依策略對 items 重排並補 rank。"""
+    def manual_boost(x: dict) -> int:
+        return 1 if x.get("is_manual") else 0
+
     if strategy == "hotness":
-        key = lambda x: x.get("engagement", 0) or 0
+        key = lambda x: (manual_boost(x), x.get("engagement", 0) or 0)
     else:  # balanced
-        def key(x: dict) -> float:
-            return float(
-                (x.get("engagement", 0) or 0)
-                * (0.5 + (x.get("topic_match", 0) or 0))
+        def key(x: dict) -> tuple[int, float]:
+            return (
+                manual_boost(x),
+                float(
+                    (x.get("engagement", 0) or 0)
+                    * (0.5 + (x.get("topic_match", 0) or 0))
+                ),
             )
     sorted_items = sorted(items, key=key, reverse=True)
     # 重新標 rank（1, 2, 3, ...）
@@ -160,6 +253,15 @@ def add_manual_candidate(
     title = (title or "").strip()
     if not title:
         raise InvalidInput("title cannot be empty")
+    url = str(url).strip()
+    if platform == "xiaohongshu":
+        clean_url = _sanitize_xhs_note_url(url)
+        if clean_url is None:
+            raise InvalidInput(
+                "小紅書手動補爆款只接受 "
+                "https://www.xiaohongshu.com/explore/<note_id> 原文連結"
+            )
+        url = clean_url
 
     today = _today_iso()
     doc_id = _make_candidate_id(today, category)
@@ -171,6 +273,7 @@ def add_manual_candidate(
     new_item = {
         "platform": platform,
         "url": url,
+        "source_url": url,
         "title": title[:200],
         "engagement": int(engagement),
         "completion_rate": None,
@@ -215,7 +318,107 @@ def _classify_role_inline(topic: float, intent: float) -> str:
     return "awareness"
 
 
+# --- 小紅書預覽（Apify proxy，台灣 IP 無法直連） ---
+
+
+def _extract_note_id(url: str) -> str | None:
+    """Extract hex note ID from a xiaohongshu.com explore URL."""
+    m = re.search(r"/explore/([0-9a-f]{16,32})", url or "")
+    return m.group(1) if m else None
+
+
+def get_xhs_preview(note_url: str) -> dict:
+    """取得小紅書貼文預覽，供後台彈窗顯示。
+
+    優先順序：
+      ① Firestore xhs_preview_cache（爬取時存入，0 延遲，100% 可靠）
+      ② Apify 即時抓取（快取 miss 時嘗試，可能失敗）
+
+    Args:
+        note_url: xiaohongshu.com/explore/{hex_id} 格式（含 xsec_token 亦可）
+
+    Returns:
+        {"title", "content", "images", "author", "likes", "comments", "collects"}
+
+    Raises:
+        InvalidInput: URL 格式不符
+        ResourceNotFound: 快取未命中且 Apify 也無資料
+    """
+    clean_url = _sanitize_xhs_note_url(note_url)
+    if clean_url is None:
+        raise InvalidInput(
+            f"invalid xiaohongshu note url: {note_url!r}; "
+            "only https://www.xiaohongshu.com/explore/<hex_id> is allowed"
+        )
+
+    # ① Firestore 快取（爬取時寫入，直接回傳）
+    note_id = _extract_note_id(clean_url)
+    if note_id:
+        cached = fs.get_xhs_preview_cache(note_id)
+        if _is_usable_xhs_preview(cached):
+            return cached
+
+    # ② Apify fallback（快取 miss 時，適用於舊候選或手動補入的 URL）
+    result = crawler_client.fetch_xhs_post_details(clean_url)
+    if result is None:
+        raise ResourceNotFound(
+            f"xhs post not found or preview unavailable: {clean_url}"
+        )
+    if note_id and _is_usable_xhs_preview(result):
+        try:
+            fs.save_xhs_preview_cache(note_id, result)
+        except Exception as e:
+            logger.warning(
+                "xhs_preview_cache_save_failed note_id=%s err=%s",
+                note_id, type(e).__name__,
+            )
+    return result
+
+
+def _is_usable_xhs_preview(preview: dict | None) -> bool:
+    """A cached preview is useful only if it has body text or media."""
+    if not isinstance(preview, dict):
+        return False
+    content = (preview.get("content") or "").strip()
+    images = preview.get("images")
+    return bool(content or (isinstance(images, list) and images))
+
+
 # --- 跨模組公開（ScriptService 用） ---
+
+
+def _sanitize_xhs_note_url(note_url: str) -> str | None:
+    """Allow only Xiaohongshu note URLs plus known-safe auth query params."""
+    if _XHS_NOTE_URL_RE.match(note_url):
+        return note_url
+
+    try:
+        parsed = urlsplit(note_url)
+    except ValueError:
+        return None
+
+    if parsed.scheme != "https" or parsed.netloc != "www.xiaohongshu.com":
+        return None
+
+    # 接受兩種貼文路徑：
+    #   /explore/{id}            （網頁版網址）
+    #   /discovery/item/{id}     （App / pc 分享連結格式，自動轉成 explore）
+    note_id = None
+    for prefix in ("/explore/", "/discovery/item/"):
+        if parsed.path.startswith(prefix):
+            note_id = parsed.path[len(prefix):].strip("/")
+            break
+    if note_id is None or not _XHS_NOTE_ID_RE.fullmatch(note_id):
+        return None
+
+    kept_params = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=False)
+        if key in _XHS_ALLOWED_QUERY_KEYS and value
+    ]
+    query = urlencode(kept_params)
+    # 一律正規化成 /explore/ 格式（分享連結的 /discovery/item/ 也轉成 explore）
+    return urlunsplit(("https", "www.xiaohongshu.com", f"/explore/{note_id}", query, ""))
 
 
 def get_candidates(candidate_ids: list[str]) -> list[dict]:

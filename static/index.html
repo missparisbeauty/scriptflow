@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ScriptFlow — 短影音變現操盤台</title>
-  <link rel="stylesheet" href="/static/css/main.css?v=DEV">
+  <link rel="stylesheet" href="/static/css/main.css?v=20260526d">
 </head>
 <body>
 
@@ -243,8 +243,34 @@
     <div id="toast-container" class="toast-container"></div>
   </div>
 
-  <script type="module" src="/static/js/common.js?v=DEV"></script>
-  <script type="module" src="/static/js/dashboard.js?v=DEV"></script>
-  <script type="module" src="/static/js/tracking.js?v=DEV"></script>
+  <!-- 小紅書內容預覽 Modal -->
+  <div id="xhs-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="xhs-modal-title" hidden>
+    <div class="modal__backdrop"></div>
+    <div class="modal__box">
+      <div class="modal__header">
+        <h3 id="xhs-modal-title" class="modal__title">📖 小紅書內容預覽</h3>
+        <button id="xhs-modal-close" class="modal__close" type="button" aria-label="關閉">✕</button>
+      </div>
+      <div id="xhs-modal-body" class="modal__body">
+        <div id="xhs-modal-loading" class="modal__loading">
+          <span class="modal__spinner"></span>透過 Apify 載入中，約需 15～30 秒…
+        </div>
+        <p id="xhs-modal-error" class="modal__error" hidden></p>
+        <div id="xhs-modal-content" class="modal__content" hidden>
+          <div id="xhs-modal-images" class="modal__images"></div>
+          <div class="modal__meta">
+            <span id="xhs-modal-author" class="modal__author"></span>
+            <div id="xhs-modal-stats" class="modal__stats"></div>
+          </div>
+          <h4 id="xhs-modal-post-title" class="modal__post-title"></h4>
+          <p id="xhs-modal-text" class="modal__text"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/common.js?v=20260527a"></script>
+  <script type="module" src="/static/js/dashboard.js?v=20260527a"></script>
+  <script type="module" src="/static/js/tracking.js?v=20260527a"></script>
 </body>
 </html>

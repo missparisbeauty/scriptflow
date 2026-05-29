@@ -19,6 +19,7 @@ from modules.candidates.service import (
     add_manual_candidate,
     get_recent_candidates,
     get_today_candidates,
+    get_xhs_preview,
 )
 
 router = APIRouter(
@@ -44,6 +45,17 @@ def list_recent(
     strategy: Strategy = Query("balanced"),
 ) -> dict:
     data = get_recent_candidates(days=days, category=category, strategy=strategy)
+    return ok(data)
+
+
+@router.get("/xhs-preview")
+def xhs_preview_endpoint(url: str = Query(..., max_length=600)) -> dict:
+    """透過 Apify proxy 抓取小紅書貼文內容，供前端彈窗預覽。
+
+    台灣 IP 無法直接存取小紅書（TCP 封鎖），改由後端 Apify 代理。
+    每次呼叫消耗約 $0.010（zhorex actor）。
+    """
+    data = get_xhs_preview(url)
     return ok(data)
 
 

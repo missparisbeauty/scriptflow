@@ -29,3 +29,6 @@ env
 .idea
 .DS_Store
 Thumbs.db
+FireShot Capture*.png
+*_files/
+*.html_files/

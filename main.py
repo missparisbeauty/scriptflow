@@ -100,7 +100,7 @@ _SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Content-Security-Policy": (
         "default-src 'self'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: https:; "
         "style-src 'self' 'unsafe-inline'; "
         "script-src 'self'"
     ),

@@ -1,8 +1,8 @@
-"""三平台爬取輔助 client 封裝 — Phase 3 + Apify + TikWM 整合。
+"""雙平台爬取輔助 client 封裝 — Phase 3 + Apify + TikWM 整合。
 
 責任：
   - fetch_hot_content(platform, category, hours, limit) → list[dict]
-  - 三平台：xiaohongshu / douyin / threads
+  - 雙平台：xiaohongshu / douyin
   - 介面對齊 candidates collection 的 items[*] 欄位（spec-developer）
   - 後端模式（CRAWLER_BACKEND env）：
       mock   → 回確定性測試資料
@@ -11,7 +11,8 @@
       未設定  → 有 APIFY_TOKEN 走 apify，否則走 tikwm
 
 設計：
-  - tikwm 只支援 douyin；xiaohongshu / threads 無 tikwm actor，各自 fallback mock
+  - tikwm 只支援 douyin；xiaohongshu 無 tikwm actor，fallback mock
+  - douyin Apify 失敗時自動 fallback TikWM（免費備援）
   - Apify Actor IDs 透過 env 可覆寫，預設用 clockworks/free-tiktok-scraper
   - rule-ai-llm：API token 只在 infra 層讀取
 """
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # --- 設定 ---
 
-SUPPORTED_PLATFORMS = ("xiaohongshu", "douyin", "threads")
+SUPPORTED_PLATFORMS = ("xiaohongshu", "douyin")
 APIFY_TIMEOUT_SECONDS = 90   # Apify run-sync 較慢
 TIKWM_TIMEOUT_SECONDS = 30   # TikWM 直接 API，較快
 MAX_HOURS = 168
@@ -44,8 +45,14 @@ TIKWM_BASE_URL = "https://tikwm.com/api"
 APIFY_ACTOR_DOUYIN = os.getenv(
     "APIFY_ACTOR_DOUYIN", "clockworks/free-tiktok-scraper"
 )
-APIFY_ACTOR_XIAOHONGSHU = os.getenv("APIFY_ACTOR_XIAOHONGSHU", "")
+APIFY_ACTOR_XIAOHONGSHU = os.getenv(
+    "APIFY_ACTOR_XIAOHONGSHU", "zhorex/rednote-xiaohongshu-scraper"
+)
+APIFY_ACTOR_XIAOHONGSHU_PREVIEW = os.getenv(
+    "APIFY_ACTOR_XIAOHONGSHU_PREVIEW", "zhorex/rednote-xiaohongshu-scraper"
+)
 APIFY_ACTOR_THREADS = os.getenv("APIFY_ACTOR_THREADS", "")
+XHS_COOKIES = os.getenv("SF_XHS_COOKIES", "")
 
 # 各分類對應的搜尋關鍵字
 _CATEGORY_KEYWORDS: dict[str, list[str]] = {
@@ -104,7 +111,13 @@ def fetch_hot_content(
     hours: int = 24,
     limit: int = 20,
 ) -> list[dict]:
-    """抓取指定平台的熱門內容。"""
+    """抓取指定平台的熱門內容。
+
+    路由邏輯：
+      mock  → 全部走 mock
+      tikwm → douyin 走 TikWM（免費）；其他平台若有 Apify Actor 則走 Apify，否則 mock
+      apify → 全部走 Apify；無 token 時 douyin fallback TikWM，其他 mock
+    """
     if platform not in SUPPORTED_PLATFORMS:
         raise ValueError(
             f"unsupported platform={platform!r}, "
@@ -120,14 +133,26 @@ def fetch_hot_content(
 
     if backend == "mock":
         return _mock_fetch_hot_content(platform, category, hours, limit)
+
     if backend == "tikwm":
-        return _tikwm_fetch_hot_content(platform, category, hours, limit)
-    # apify
-    if not settings.APIFY_TOKEN:
+        if platform == "douyin":
+            # douyin：TikWM 免費，省下 Apify 額度給其他平台
+            return _tikwm_fetch_hot_content(platform, category, hours, limit)
+        # 非 douyin：TikWM 不支援 → 若有 Apify Actor 就走 Apify
+        if settings.APIFY_TOKEN and _platform_actor_id(platform):
+            logger.info("crawler.tikwm_to_apify platform=%s", platform)
+            return _apify_fetch_hot_content(platform, category, hours, limit)
         logger.warning(
-            "crawler.apify_no_token — fallback to tikwm"
+            "crawler.tikwm_no_apify_actor platform=%s — fallback mock", platform
         )
-        return _tikwm_fetch_hot_content(platform, category, hours, limit)
+        return _mock_fetch_hot_content(platform, category, hours, limit)
+
+    # apify backend
+    if not settings.APIFY_TOKEN:
+        logger.warning("crawler.apify_no_token — douyin fallback tikwm, others mock")
+        if platform == "douyin":
+            return _tikwm_fetch_hot_content(platform, category, hours, limit)
+        return _mock_fetch_hot_content(platform, category, hours, limit)
     return _apify_fetch_hot_content(platform, category, hours, limit)
 
 
@@ -226,6 +251,7 @@ def _map_tikwm_item(raw: dict) -> dict | None:
     return {
         "platform": "douyin",
         "url": url,
+        "source_url": url,
         "title": title,
         "engagement": int(engagement),
         "completion_rate": None,
@@ -264,10 +290,14 @@ def _apify_fetch_hot_content(
     try:
         items = _call_apify_actor(actor_id, actor_input)
     except Exception as e:
+        http_status = getattr(getattr(e, "response", None), "status_code", None)
         logger.error(
-            "crawler.apify_call_failed platform=%s actor=%s err=%s — returning empty",
-            platform, actor_id, type(e).__name__,
+            "crawler.apify_call_failed platform=%s actor=%s err=%s http_status=%s — returning empty",
+            platform, actor_id, type(e).__name__, http_status,
         )
+        if platform == "douyin":
+            logger.info("crawler.apify_douyin_fallback_tikwm")
+            return _tikwm_fetch_hot_content(platform, category, hours, limit)
         return []
 
     raw_mapped = [_map_actor_item(platform, raw) for raw in items]
@@ -289,7 +319,6 @@ def _platform_actor_id(platform: str) -> str:
     return {
         "douyin": APIFY_ACTOR_DOUYIN,
         "xiaohongshu": APIFY_ACTOR_XIAOHONGSHU,
-        "threads": APIFY_ACTOR_THREADS,
     }.get(platform, "")
 
 
@@ -321,9 +350,40 @@ def _build_actor_input(
             "shouldDownloadSubtitles": False,
         }
     if platform == "xiaohongshu":
-        return {"keyword": keywords[0], "keywords": keywords, "maxItems": over_fetch}
-    if platform == "threads":
-        return {"search_keyword": keywords[0], "max_posts": over_fetch}
+        xhs_limit = min(over_fetch, 12)
+        actor_id = APIFY_ACTOR_XIAOHONGSHU
+        proxy_cn: dict[str, Any] = {
+            "useApifyProxy": True,
+            "apifyProxyCountry": "CN",
+        }
+        if "zhorex/rednote-xiaohongshu-scraper" in actor_id:
+            return {
+                "mode": "search",
+                "keywords": [keywords[0]],
+                "maxItems": xhs_limit,
+                "proxyConfiguration": proxy_cn,
+            }
+        if "zen-studio/rednote-search-scraper" in actor_id:
+            return {
+                "keywords": [keywords[0]],
+                "maxResults": xhs_limit,
+                "sortType": "popularity_descending",
+                "noteType": "all",
+                "timeFilter": "all",
+                "topUpFromOtherSorts": True,
+            }
+        if "dltik/rednote-xiaohongshu-scraper" in actor_id:
+            return {
+                "mode": "search",
+                "queries": [keywords[0]],
+                "maxResultsPerInput": xhs_limit,
+            }
+        return {
+            "mode": "search",
+            "searchQuery": keywords[0],
+            "maxResults": xhs_limit,
+            "sortBy": "popularity_descending",
+        }
     return {"keywords": keywords, "limit": over_fetch}
 
 
@@ -332,24 +392,48 @@ def _map_actor_item(platform: str, raw: dict) -> dict | None:
     if not isinstance(raw, dict):
         return None
 
-    title = (
-        raw.get("text") or raw.get("title") or raw.get("desc")
-        or raw.get("description") or ""
+    title = _first_text(
+        raw,
+        "text", "title", "displayTitle", "desc", "description", "content",
+        "noteTitle",
     )
     title = (title or "").strip()[:120]
     if not title:
         return None
 
-    url = (
-        raw.get("webVideoUrl") or raw.get("url") or raw.get("postUrl")
-        or raw.get("link") or ""
-    )
+    url = _extract_source_url(raw, platform)
+    if not url:
+        logger.warning(
+            "crawler.apify_missing_source_url platform=%s raw_keys=%s",
+            platform,
+            sorted(raw.keys()),
+        )
+        return None
 
     plays    = _to_int(raw.get("playCount") or raw.get("viewCount") or raw.get("views"))
-    likes    = _to_int(raw.get("diggCount") or raw.get("likes") or raw.get("likeCount"))
-    comments = _to_int(raw.get("commentCount") or raw.get("comments"))
-    shares   = _to_int(raw.get("shareCount") or raw.get("shares"))
+    likes    = _to_int(_first_value(raw, "diggCount", "likes", "likeCount", "liked_count"))
+    comments = _to_int(_first_value(raw, "commentCount", "comments", "comment_count"))
+    shares   = _to_int(_first_value(raw, "shareCount", "shares", "share_count"))
+    collects = _to_int(_first_value(raw, "collectCount", "collectedCount", "collected_count"))
+
+    interactions = raw.get("interactions")
+    if isinstance(interactions, dict):
+        likes = likes or _to_int(interactions.get("liked_count") or interactions.get("likeCount"))
+        comments = comments or _to_int(interactions.get("comment_count") or interactions.get("commentCount"))
+        shares = shares or _to_int(interactions.get("share_count") or interactions.get("shareCount"))
+        collects = collects or _to_int(interactions.get("collected_count") or interactions.get("collectCount"))
+
+    # zen-studio/rednote-search-scraper 使用 interactInfo（而非 interactions）
+    interact_info = raw.get("interactInfo") or {}
+    if isinstance(interact_info, dict):
+        likes = likes or _to_int(interact_info.get("likedCount") or interact_info.get("liked_count") or 0)
+        comments = comments or _to_int(interact_info.get("commentCount") or interact_info.get("comment_count") or 0)
+        shares = shares or _to_int(interact_info.get("shareCount") or interact_info.get("share_count") or 0)
+        collects = collects or _to_int(interact_info.get("collectCount") or interact_info.get("collectedCount") or 0)
+
     engagement = plays or (likes + comments * 5 + shares * 3) or likes or 0
+    if platform == "xiaohongshu":
+        engagement = plays or (likes + collects * 2 + comments * 5 + shares * 3) or likes or 0
 
     completion_rate = raw.get("completionRate")
     if completion_rate is not None:
@@ -358,9 +442,68 @@ def _map_actor_item(platform: str, raw: dict) -> dict | None:
         except (TypeError, ValueError):
             completion_rate = None
 
-    return {
+    # ── XHS：額外擷取 preview 資料（圖片、作者、全文），供 Firestore 快取 ─────
+    xhs_preview: dict | None = None
+    if platform == "xiaohongshu":
+        raw_images = (
+            raw.get("imageList") or raw.get("images") or
+            raw.get("image_list") or raw.get("imageUrls") or
+            raw.get("cover") and [raw["cover"]] or []
+        )
+        # cover 欄位可能是 dict，包裝成 list 處理
+        if isinstance(raw.get("cover"), dict) and not raw_images:
+            raw_images = [raw["cover"]]
+        preview_imgs: list[str] = []
+        for img in raw_images[:4]:
+            if isinstance(img, dict):
+                img_url = (
+                    img.get("url") or img.get("urlDefault") or
+                    img.get("src") or img.get("originUrl") or
+                    img.get("imageUrl") or ""
+                )
+            elif isinstance(img, str):
+                img_url = img
+            else:
+                img_url = ""
+            if img_url:
+                preview_imgs.append(img_url)
+
+        p_author_obj = raw.get("author") or raw.get("user") or raw.get("userInfo") or {}
+        p_author = (
+            _first_text(p_author_obj, "nickname", "name", "username", "nickName")
+            if isinstance(p_author_obj, dict) else ""
+        ) or _first_text(raw, "authorName", "nickName", "nickname")
+
+        p_content = _first_text(raw, "description", "content", "desc", "body", "noteDesc")
+        if p_content == title:
+            p_content = ""  # 避免重複
+
+        p_interact = raw.get("interactInfo") or {}
+        p_likes = likes or _to_int(
+            p_interact.get("likedCount") or p_interact.get("liked_count") or 0
+        )
+        p_comments = comments or _to_int(
+            p_interact.get("commentCount") or p_interact.get("comment_count") or 0
+        )
+        p_collects = collects or _to_int(
+            p_interact.get("collectedCount") or p_interact.get("collectCount") or 0
+        )
+
+        if preview_imgs or p_content:
+            xhs_preview = {
+                "title":    title,
+                "images":   preview_imgs,
+                "author":   p_author,
+                "content":  p_content[:600] if p_content else "",
+                "likes":    p_likes,
+                "comments": p_comments,
+                "collects": p_collects,
+            }
+
+    result: dict = {
         "platform": platform,
         "url": url,
+        "source_url": url,
         "title": title,
         "engagement": int(engagement),
         "completion_rate": completion_rate,
@@ -369,6 +512,9 @@ def _map_actor_item(platform: str, raw: dict) -> dict | None:
         "funnel_role": None,
         "b_track_similarity": None,
     }
+    if xhs_preview is not None:
+        result["preview"] = xhs_preview
+    return result
 
 
 def _to_int(v: Any) -> int:
@@ -376,6 +522,272 @@ def _to_int(v: Any) -> int:
         return int(v) if v is not None else 0
     except (TypeError, ValueError):
         return 0
+
+
+def _first_value(raw: dict, *keys: str) -> Any:
+    for key in keys:
+        value = raw.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _first_text(raw: dict, *keys: str) -> str:
+    value = _first_value(raw, *keys)
+    if isinstance(value, dict):
+        return ""
+    return str(value or "")
+
+
+def _extract_source_url(raw: dict, platform: str) -> str:
+    """Return the public original post URL for a crawled item."""
+
+    # 小紅書：若 actor 回傳帶 xsec_token 的 explore URL，優先保留，供預覽抓單篇詳情。
+    # 否則用 note_id 建構乾淨 explore URL，避開 xhslink.com 短網址。
+    if platform == "xiaohongshu":
+        token_url = _first_text(
+            raw,
+            "postUrl", "post_url", "noteUrl", "note_url", "url",
+            "canonicalUrl", "shareUrl", "share_url", "link", "href",
+        ).strip()
+        if token_url and "xiaohongshu.com/explore/" in token_url and "xsec_token=" in token_url:
+            return token_url
+
+        note_id = _first_text(raw, "note_id", "noteId", "noteid").strip()
+        # 嚴格驗證 hex note_id，避免誤用其他欄位的值
+        if note_id and re.match(r"^[0-9a-f]{16,32}$", note_id):
+            return f"https://www.xiaohongshu.com/explore/{note_id}"
+        # fallback：若 note_id 找不到，嘗試從 raw["id"] 取（部分 actor 版本用法）
+        alt_id = _first_text(raw, "id").strip()
+        if alt_id and re.match(r"^[0-9a-f]{16,32}$", alt_id):
+            return f"https://www.xiaohongshu.com/explore/{alt_id}"
+
+    # 通用 URL 欄位（douyin / threads / 小紅書 fallback）
+    url = _first_text(
+        raw,
+        "webVideoUrl", "url", "postUrl", "post_url", "noteUrl", "note_url",
+        "link", "shareUrl", "share_url", "href", "canonicalUrl",
+    ).strip()
+    if url:
+        return url
+
+    if platform == "douyin":
+        video_id = _first_text(raw, "id", "video_id", "awemeId").strip()
+        author = raw.get("author") or raw.get("authorMeta") or {}
+        username = ""
+        if isinstance(author, dict):
+            username = _first_text(author, "unique_id", "uniqueId", "name", "nickname")
+        if username and video_id:
+            return f"https://www.tiktok.com/@{username}/video/{video_id}"
+
+    return ""
+
+
+# =========================================================
+# 小紅書貼文預覽（post_details 模式，後端代理）
+# =========================================================
+
+def fetch_xhs_post_details(note_url: str) -> dict | None:
+    """用 zhorex actor post_details 模式抓單篇小紅書貼文。
+
+    費用：$0.010/次（供台灣使用者不需 VPN 預覽原文）。
+    失敗時回傳 None，由呼叫方決定如何處理。
+    """
+    actor_id = APIFY_ACTOR_XIAOHONGSHU_PREVIEW or APIFY_ACTOR_XIAOHONGSHU
+    if not actor_id or not settings.APIFY_TOKEN:
+        logger.warning(
+            "crawler.xhs_preview_no_config actor=%s has_token=%s",
+            bool(actor_id), bool(settings.APIFY_TOKEN),
+        )
+        return None
+
+    actor_input = _build_xhs_preview_input(actor_id, note_url)
+    logger.info(
+        "crawler.xhs_preview_call actor=%s url=%s input_keys=%s",
+        actor_id, note_url, list(actor_input.keys()),
+    )
+    try:
+        items = _call_apify_actor(actor_id, actor_input)
+    except Exception as e:
+        status_info = ""
+        if hasattr(e, "response") and e.response is not None:
+            status_info = f" http_status={e.response.status_code}"
+        logger.error(
+            "crawler.xhs_post_details_failed url=%s actor=%s err=%s%s",
+            note_url, actor_id, type(e).__name__, status_info,
+        )
+        return None
+
+    logger.info(
+        "crawler.xhs_preview_result actor=%s url=%s items_count=%d",
+        actor_id, note_url, len(items),
+    )
+    if not items:
+        logger.warning(
+            "crawler.xhs_preview_empty actor=%s url=%s — actor returned no items",
+            actor_id, note_url,
+        )
+        return None
+
+    # 過濾 Apify 內部 metadata 項目（只有 _ 前綴 key，無真實資料）
+    real_items = [i for i in items if any(not k.startswith("_") for k in i.keys())]
+    if not real_items:
+        logger.warning(
+            "crawler.xhs_preview_metadata_only actor=%s url=%s keys=%s — no real post data",
+            actor_id, note_url, sorted(items[0].keys()),
+        )
+        return None
+
+    return _map_xhs_post_detail(_unwrap_xhs_post_detail(real_items[0]))
+
+
+def _unwrap_xhs_post_detail(raw: dict) -> dict:
+    """Return the most likely nested note payload from actor-specific wrappers."""
+    for key in ("data", "note", "post", "detail", "result"):
+        value = raw.get(key)
+        if isinstance(value, dict):
+            nested = _unwrap_xhs_post_detail(value)
+            if _xhs_detail_score(nested) > _xhs_detail_score(raw):
+                return nested
+    return raw
+
+
+def _xhs_detail_score(raw: dict) -> int:
+    score = 0
+    if _first_text(raw, "title", "displayTitle", "noteTitle", "desc", "text"):
+        score += 1
+    if _first_text(raw, "description", "content", "body"):
+        score += 2
+    if raw.get("imageList") or raw.get("images") or raw.get("image_list") or raw.get("pics"):
+        score += 2
+    if raw.get("user") or raw.get("author") or raw.get("userInfo"):
+        score += 1
+    return score
+
+
+def _build_xhs_preview_input(actor_id: str, note_url: str) -> dict[str, Any]:
+    """Return the actor-specific input shape for a single XHS note preview.
+
+    所有 actor 都帶 proxyConfiguration（中國大陸 IP），繞過台灣地理封鎖。
+    """
+    # 中國代理設定（小紅書在台灣 TCP-level 封鎖，必須走 CN IP）
+    proxy_cn: dict[str, Any] = {
+        "useApifyProxy": True,
+        "apifyProxyCountry": "CN",
+    }
+
+    if "curious_coder/xiaohongshu-scraper" in actor_id:
+        return {
+            "startUrls": [{"url": note_url}],
+            "maxItems": 1,
+            "proxyConfiguration": proxy_cn,
+        }
+    if "dltik/rednote-xiaohongshu-scraper" in actor_id:
+        actor_input: dict[str, Any] = {
+            "mode": "post",
+            "noteUrls": [note_url],
+            "proxyConfiguration": proxy_cn,
+        }
+        if XHS_COOKIES:
+            actor_input["cookiesString"] = XHS_COOKIES
+        return actor_input
+    if "zhorex/rednote-xiaohongshu-scraper" in actor_id:
+        return {
+            "mode": "post_details",
+            "postUrls": [note_url],
+            "proxyConfiguration": proxy_cn,
+        }
+    # 預設用 startUrls（通用 Apify 格式）
+    return {
+        "startUrls": [{"url": note_url}],
+        "maxItems": 1,
+        "proxyConfiguration": proxy_cn,
+    }
+
+
+def _map_xhs_post_detail(raw: dict) -> dict:
+    """Map actor post_details output → preview schema.
+
+    支援多種 actor 輸出格式：
+    - curious_coder: title, description, imageList[{url}], author.nickname,
+                     interactInfo.{likedCount, commentCount, collectedCount}
+    - dltik/zhorex: title, content, images[{url}], author/user.nickname,
+                    diggCount/likeCount, commentCount, collectCount
+    """
+    logger.info("crawler.xhs_detail_raw_keys top_keys=%s", sorted(raw.keys()))
+
+    # ── 標題 ──────────────────────────────────────────────────────────────────
+    title = _first_text(raw, "title", "displayTitle", "noteTitle", "desc", "text")
+
+    # ── 內文 ──────────────────────────────────────────────────────────────────
+    content = _first_text(raw, "description", "content", "desc", "body", "text")
+    # 避免 title == content（部分 actor 把全文放在 title）
+    if content and content == title:
+        content = ""
+
+    # ── 圖片（最多 4 張）──────────────────────────────────────────────────────
+    # curious_coder → imageList；其他 actor → images
+    raw_images = (
+        raw.get("imageList") or
+        raw.get("images") or
+        raw.get("image_list") or
+        raw.get("pics") or
+        []
+    )
+    images: list[str] = []
+    for img in raw_images[:4]:
+        img_url = ""
+        if isinstance(img, dict):
+            img_url = (
+                img.get("url") or img.get("urlDefault") or
+                img.get("src") or img.get("imageUrl") or
+                img.get("originUrl") or ""
+            )
+        elif isinstance(img, str):
+            img_url = img
+        if img_url:
+            images.append(img_url)
+
+    # ── 作者 ──────────────────────────────────────────────────────────────────
+    author_obj = raw.get("author") or raw.get("user") or {}
+    author_name = (
+        _first_text(author_obj, "nickname", "name", "username")
+        if isinstance(author_obj, dict) else ""
+    )
+    author_name = author_name or _first_text(raw, "authorName", "nickname", "userName")
+
+    # ── 互動數 ────────────────────────────────────────────────────────────────
+    # curious_coder → interactInfo.{likedCount, commentCount, collectedCount}
+    # 其他 → 直接在頂層 or interactions.*
+    interact = raw.get("interactInfo") or raw.get("interactions") or {}
+
+    likes = _to_int(_first_value(raw, "diggCount", "likes", "likeCount", "liked_count"))
+    if not likes and isinstance(interact, dict):
+        likes = _to_int(
+            interact.get("likedCount") or interact.get("liked_count") or
+            interact.get("likeCount") or interact.get("diggCount") or 0
+        )
+
+    comments = _to_int(_first_value(raw, "commentCount", "comments", "comment_count"))
+    if not comments and isinstance(interact, dict):
+        comments = _to_int(interact.get("commentCount") or interact.get("comment_count") or 0)
+
+    collects = _to_int(_first_value(raw, "collectCount", "collectedCount", "collected_count", "saves"))
+    if not collects and isinstance(interact, dict):
+        collects = _to_int(
+            interact.get("collectedCount") or interact.get("collectCount") or
+            interact.get("collected_count") or 0
+        )
+
+    return {
+        "title":    (title   or "")[:200],
+        "content":  (content or "")[:600],
+        "images":   images,
+        "author":   author_name,
+        "likes":    likes,
+        "comments": comments,
+        "collects": collects,
+    }
 
 
 # =========================================================
@@ -393,6 +805,7 @@ def _candidate_item(
     return {
         "platform": platform,
         "url": f"https://example.com/{platform}/mock-{index:03d}",
+        "source_url": f"https://example.com/{platform}/mock-{index:03d}",
         "title": title,
         "engagement": engagement,
         "completion_rate": completion_rate,
@@ -427,16 +840,6 @@ _MOCK_FIXTURES: dict[tuple[str, str], list[tuple[str, int, float | None]]] = {
     ],
     ("douyin", "美食"): [
         ("增肌餐這樣搭｜健身教練的菜單", 289_000, 0.69),
-    ],
-    ("threads", "髮品"): [
-        ("分享我的養髮日常｜每週兩次的儀式感", 89_000, None),
-        ("受損髮質這樣救！我的養髮日記第 28 天", 124_000, None),
-    ],
-    ("threads", "美妝"): [
-        ("我的早晚保養流程｜30 歲後的選擇", 67_000, None),
-    ],
-    ("threads", "美食"): [
-        ("早餐這樣準備一週｜上班族友善食譜", 92_000, None),
     ],
 }
 

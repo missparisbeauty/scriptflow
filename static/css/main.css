@@ -267,6 +267,28 @@ body {
   color: #94a3b8; background: #f1f5f9; border-color: #e2e8f0;
   cursor: not-allowed;
 }
+.cand__url--geo {
+  color: #b45309; background: #fffbeb; border-color: #fde68a;
+  cursor: help;
+}
+.cand__url--go {
+  color: #be123c; background: #fff1f2; border-color: #fecdd3;
+}
+.cand__url--go:hover { background: #ffe4e6; }
+/* 真實 URL：看原文 + 複製連結 並排 */
+.cand__url-row {
+  display: flex; gap: 4px;
+}
+.cand__url-row .cand__url {
+  flex: 1; text-align: center;
+}
+.cand__copy-url {
+  padding: 4px 8px; font-size: 11px; white-space: nowrap;
+  color: #64748b; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 4px;
+  cursor: pointer; font-family: inherit;
+}
+.cand__copy-url:hover { background: #f1f5f9; border-color: #cbd5e1; }
 
 /* 5 階段購買旅程顏色：認知 → 興趣 → 評估 → 品牌 → 決策（漸進加強） */
 .cand__role--awareness { background: #e0e7ff; color: #3730a3; }   /* 認知：淺紫 */
@@ -350,4 +372,112 @@ body {
 @keyframes slide-in {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
+}
+
+/* --- 小紅書預覽 Modal --- */
+.cand__preview-btn {
+  padding: 4px 8px; font-size: 11px; white-space: nowrap;
+  color: #be123c; background: #fff1f2;
+  border: 1px solid #fecdd3; border-radius: 4px;
+  cursor: pointer; font-family: inherit;
+}
+.cand__preview-btn:hover { background: #ffe4e6; border-color: #fda4af; }
+.cand__preview-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.modal {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal[hidden] { display: none; }
+.modal__backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+.modal__box {
+  position: relative; z-index: 1;
+  width: min(520px, 92vw); max-height: 88vh;
+  background: white; border-radius: 12px;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+.modal__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  background: #fff1f2; flex-shrink: 0;
+}
+.modal__title { margin: 0; font-size: 15px; font-weight: 600; color: #9f1239; }
+.modal__close {
+  padding: 4px 8px; font-size: 16px; line-height: 1;
+  background: transparent; border: none; cursor: pointer;
+  color: #9f1239; border-radius: 4px;
+}
+.modal__close:hover { background: #fecdd3; }
+.modal__body {
+  padding: 18px; overflow-y: auto; flex: 1;
+}
+.modal__loading {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--text-muted); padding: 24px 0;
+}
+.modal__spinner {
+  display: inline-block; width: 18px; height: 18px; flex-shrink: 0;
+  border: 3px solid #fecdd3; border-top-color: #be123c;
+  border-radius: 50%;
+  animation: xhs-spin 0.8s linear infinite;
+}
+@keyframes xhs-spin {
+  to { transform: rotate(360deg); }
+}
+.modal__error {
+  font-size: 13px; color: #b91c1c; background: #fee2e2;
+  border: 1px solid #fca5a5; border-radius: 6px;
+  padding: 12px 14px; margin: 0;
+}
+.modal__images {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+}
+.modal__images img {
+  width: calc(50% - 4px); max-width: 200px;
+  aspect-ratio: 1/1; object-fit: cover;
+  border-radius: 8px; background: #f3f4f6;
+}
+.modal__meta {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px; flex-wrap: wrap; gap: 6px;
+}
+.modal__author {
+  font-size: 12px; color: var(--text-muted); font-weight: 500;
+}
+.modal__stats {
+  display: flex; gap: 10px; font-size: 12px; color: var(--text-muted);
+}
+.modal__post-title {
+  margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--text);
+  line-height: 1.4;
+}
+.modal__text {
+  margin: 0; font-size: 13px; line-height: 1.7; color: var(--text);
+  white-space: pre-wrap;
+}
+.modal__img-placeholder {
+  width: 100%; padding: 24px 16px; text-align: center;
+  background: #f9fafb; border: 1px dashed #d1d5db;
+  border-radius: 8px; font-size: 13px; color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.modal__link-action {
+  width: 100%; padding: 28px 16px; text-align: center;
+  background: #f9fafb; border-radius: 8px;
+  margin-bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.modal__link-btn {
+  display: inline-block; padding: 10px 20px;
+  background: #ff2442; color: #fff; border-radius: 6px;
+  font-size: 14px; font-weight: 600; text-decoration: none;
+  transition: background 0.15s;
+}
+.modal__link-btn:hover { background: #e01c36; }
+.modal__link-note {
+  margin: 0; font-size: 12px; color: var(--text-muted);
 }

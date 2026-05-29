@@ -32,6 +32,7 @@ COL_CANDIDATES = "candidates"
 COL_SCRIPTS = "scripts"
 COL_TRACKING = "tracking"
 COL_BRAND_DNA = "brand_dna"
+COL_XHS_PREVIEW = "xhs_preview_cache"
 
 # --- 限制 ---
 
@@ -156,6 +157,19 @@ def _query(
 def _soft_delete(collection: str, doc_id: str) -> None:
     """軟刪除（設 is_deleted=True，不實際刪 document）。"""
     _patch(collection, doc_id, {"is_deleted": True})
+
+
+# --- xhs_preview_cache collection ---
+
+
+def get_xhs_preview_cache(note_id: str) -> dict | None:
+    """讀取 XHS 貼文預覽快取（爬取時寫入，0 延遲，不需即時 Apify）。"""
+    return _get(COL_XHS_PREVIEW, note_id)
+
+
+def save_xhs_preview_cache(note_id: str, data: dict) -> str:
+    """寫入 XHS 貼文預覽快取（CrawlerService 在爬取後呼叫）。"""
+    return _save(COL_XHS_PREVIEW, note_id, data)
 
 
 # --- candidates collection ---
